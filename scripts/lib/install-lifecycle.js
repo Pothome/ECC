@@ -10,12 +10,9 @@ const { readInstallState, validateInstallState } = require('./install-state');
 const { assertWithinTrustedRoot } = require('./path-safety');
 const { createInstallPlanFromRequest } = require('./install/runtime');
 const { assertNoNewUserOwnedFile, prepareUserOwnedFileGuard } = require('./install/ownership-guard');
-const { writeFileNoFollow: guardedWriteFile } = require('./install/guarded-write');
 const { withOpenCodeInstallLocks } = require('./install/opencode-install-lock');
 const { isCodexUserConfig } = require('./install/codex-user-config');
 const {
-  disableOpenCodeHookPluginRegistration,
-  getDisabledOpenCodePluginContent,
   getRecordedHookConsent,
   withHookConsent,
 } = require('./install/hook-consent');
@@ -40,7 +37,7 @@ const {
   updateSettingsAtomic,
   validateManagedHooks,
 } = require('./install/claude-settings');
-const { adaptAntigravityAgent } = require('./install/antigravity-agent');
+const { transformInstallContent } = require('./install/content-transform');
 const { buildInstallIndex, rewriteRelativeLinks } = require('./install/link-rewrite');
 const { getInstallTargetAdapter, listInstallTargetAdapters } = require('./install-targets/registry');
 const { resolveInvocationEnvironment } = require('./invocation-environment');
@@ -57,7 +54,6 @@ const {
   readJsonNoFollow,
   removeContainedPath,
   writeContainedFile,
-  writeFileNoFollow,
 } = require('./install/contained-fs');
 const {
   JSON_REMOVE_SENTINEL,
@@ -256,24 +252,8 @@ function buildLinkIndexForOperations(operations, trustedRoot) {
   return buildInstallIndex(mappings);
 }
 
-function transformCopyFileContent(operation, content) {
-  if (!operation.contentTransform) {
-    return content;
-  }
-  if (operation.contentTransform === 'antigravity-agent-frontmatter') {
-    return adaptAntigravityAgent(content, operation.sourceRelativePath);
-  }
-  if (operation.contentTransform === 'opencode-disable-ecc-hooks') {
-    return disableOpenCodeHookPluginRegistration(content, operation.sourceRelativePath);
-  }
-  if (operation.contentTransform === 'opencode-disable-plugin-entrypoint') {
-    return getDisabledOpenCodePluginContent();
-  }
-  throw new Error(`Unknown install content transform: ${operation.contentTransform}`);
-}
-
 function getExpectedCopyFileContent(operation, content, linkIndex) {
-  const transformed = transformCopyFileContent(operation, content);
+  const transformed = transformInstallContent(operation, content);
   if (!linkIndex || !operation.sourceRelativePath || !isMarkdownPath(operation.destinationPath)) {
     return transformed;
   }
@@ -1512,9 +1492,11 @@ function prepareRepairMigration(plan, record) {
     statePreview: buildAdapterDerivedStatePreview(plan.statePreview, record),
   };
   const initialMigration = prepareClaudeSkillMigration(trustedPlan);
-  const guardedMigration = record.adapter.id === 'codex-home'
-    ? prepareUserOwnedFileGuard(trustedPlan, initialMigration)
-    : initialMigration;
+  // Repair normalizes recorded target metadata to the adapter-derived roots.
+  // Preserve its recorded operations as the ownership evidence.
+  const guardedMigration = prepareUserOwnedFileGuard(
+    trustedPlan, initialMigration, buildAdapterDerivedStatePreview(record.state, record)
+  );
   const migration = trustedPlan.target === 'opencode'
     ? require('./install/apply').prepareHookConsentMigration(trustedPlan, guardedMigration)
     : guardedMigration;
@@ -1833,9 +1815,7 @@ function repairInstalledStates(options = {}) {
             const { assertOpenCodeActivationUnchanged } = require('./install/apply');
             assertOpenCodeActivationUnchanged(desiredPlan, operation, activationSnapshot);
           }
-          if (record.adapter.id === 'codex-home') {
-            assertNoNewUserOwnedFile(migration, operation, desiredPlan);
-          }
+          assertNoNewUserOwnedFile(migration, operation, desiredPlan);
           const repairedPath = executeRepairOperation(
             context.repoRoot,
             operation,

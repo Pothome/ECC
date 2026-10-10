@@ -86,8 +86,9 @@ function listFiles(dir, base) {
     if (entry.isSymbolicLink()) {
       fail(`symlink found in profile source: ${rel}`);
     } else if (entry.isDirectory()) {
+      if (['__pycache__', '.pytest_cache'].includes(entry.name)) continue;
       out.push(...listFiles(full, rel));
-    } else if (entry.isFile()) {
+    } else if (entry.isFile() && !/\.(pyc|pyo|pyd)$/i.test(entry.name)) {
       out.push({ full, rel });
     }
   }
@@ -172,7 +173,7 @@ const descChars = skillDescriptions.reduce((n, d) => n + d.length, 0);
 
 fs.writeFileSync(path.join(tmpDir, 'README.md'), `# ecc-pi-core
 
-A curated, Pi-native profile of ECC (Everything Claude Code): ${skillCount} portable
+A curated, Pi-native profile of ECC: ${skillCount} portable
 engineering skills and ${commandCount} pure prompt-workflow commands, with no extensions,
 no hooks, no runtime downloads, and no network or SaaS dependencies.
 

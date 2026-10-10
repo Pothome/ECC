@@ -46,6 +46,7 @@ function writeEnglishReadme(root, counts, options = {}) {
   fs.writeFileSync(path.join(root, 'README.md'), `Access to ${counts.agents} agents, ${counts.skills} skills, and ${counts.commands} commands.
 - **Public surface synced to the live repo** - metadata, catalog counts, plugin manifests, and install-facing docs now match the actual OSS surface: ${counts.agents} agents, ${counts.skills} skills, and ${counts.commands} legacy command shims.
 |-- agents/           # ${counts.agents} specialized subagents for delegation
+|-- agents/           # ${counts.agents + 1} specialized subagents for delegation
 | Feature | Claude Code | Cursor IDE | Codex CLI | OpenCode |
 | --- | --- | --- | --- | --- |
 | Agents | PASS: ${tableCounts.agents} agents |
@@ -98,14 +99,14 @@ commands/ - ${counts.commands} slash commands
 function writeCrossHarnessIdentityDocs(root, counts) {
   fs.writeFileSync(
     path.join(root, 'SOUL.md'),
-    `Everything Claude Code (ECC) is a production-ready AI coding plugin with ${counts.agents} specialized agents, ${counts.skills} skills, ${counts.commands} commands, and automated hook workflows.\n`
+    `ECC is a production-ready AI coding plugin with ${counts.agents} specialized agents, ${counts.skills} skills, ${counts.commands} commands, and automated hook workflows.\n`
   );
 
   const geminiDir = path.join(root, '.gemini');
   fs.mkdirSync(geminiDir, { recursive: true });
   fs.writeFileSync(
     path.join(geminiDir, 'GEMINI.md'),
-    `Everything Claude Code (ECC) is a cross-harness coding system with ${counts.agents} specialized agents, ${counts.skills} skills, and ${counts.commands} commands.\n`
+    `ECC is a cross-harness coding system with ${counts.agents} specialized agents, ${counts.skills} skills, and ${counts.commands} commands.\n`
   );
 }
 
@@ -277,6 +278,7 @@ function runTests() {
       assert.ok(readme.includes('Access to 1 agents, 1 skills, and 1 legacy command shims'));
       assert.ok(readme.includes('actual OSS surface: 7 agents, 7 skills, and 7 legacy command shims'));
       assert.ok(readme.includes('|-- agents/           # 1 specialized subagents for delegation'));
+      assert.strictEqual((readme.match(/# 1 specialized subagents for delegation/g) || []).length, 2);
       assert.ok(readme.includes('| Skills | 42 | .agents/skills/ |'));
       assert.ok(agentsDoc.includes('providing 1 specialized agents, 1+ skills, 1 commands'));
       assert.ok(agentsDoc.includes('skills/ - 1+ workflow skills and domain knowledge'));

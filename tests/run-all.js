@@ -65,14 +65,21 @@ function annotateFailure(displayPath, reason, output) {
 }
 
 function parseCounts(combined) {
-  const passedMatch = combined.match(/Passed:\s*(\d+)/);
-  const failedMatch = combined.match(/Failed:\s*(\d+)/);
-  if (passedMatch || failedMatch) {
-    return {
-      passed: passedMatch ? parseInt(passedMatch[1], 10) : 0,
-      failed: failedMatch ? parseInt(failedMatch[1], 10) : 0,
-      definite: true,
-    };
+  // Nested runner diagnostics may contain earlier summaries. The file's last
+  // standalone summary owns its totals; mentions inside diagnostics do not.
+  const summaries = [...combined.matchAll(/^[ \t]*(?:(?:[^\r\n:]+:[ \t]*)?Results:[ \t]*)?(Passed|Failed):[ \t]*(\d+)(?:[ \t]*,?[ \t]+(Passed|Failed):[ \t]*(\d+))?(?:[ \t]*,[ \t]*Skipped:[ \t]*\d+)?[ \t]*\r?$/gm)];
+  if (summaries.length) {
+    let passed = 0;
+    let failed = 0;
+    for (const summary of summaries) {
+      if (summary[1] === 'Passed') {
+        passed = Number(summary[2]);
+        failed = 0;
+      } else failed = Number(summary[2]);
+      if (summary[3] === 'Passed') passed = Number(summary[4]);
+      else if (summary[3] === 'Failed') failed = Number(summary[4]);
+    }
+    return { passed, failed, definite: true };
   }
   const lines = combined.split(/\r?\n/);
   let tapPassed = 0;
@@ -99,12 +106,12 @@ const BOX_W = 58;
 const boxLine = s => `║${s.padEnd(BOX_W)}║`;
 
 console.log('╔' + '═'.repeat(BOX_W) + '╗');
-console.log(boxLine('           Everything Claude Code - Test Suite'));
+console.log(boxLine('           ECC - Test Suite'));
 console.log('╚' + '═'.repeat(BOX_W) + '╝');
 console.log();
 
 if (skipPatterns.length > 0) {
-  console.log(`⚠ Skipped patterns: ${skipPatterns.join(', ')}`);
+  console.log(`Skipped patterns: ${skipPatterns.join(', ')}`);
   console.log();
 }
 
@@ -148,7 +155,10 @@ for (const testFile of testFiles) {
   if (stderr) console.log(stderr);
 
   const combined = `${stdout}\n${stderr}`;
-  const counts = parseCounts(combined);
+  // Counts belong to stdout when a suite prints its summary there. Stderr is
+  // diagnostic output and may quote the failing nested process verbatim.
+  const stdoutCounts = parseCounts(stdout);
+  const counts = stdoutCounts.definite ? stdoutCounts : parseCounts(stderr);
   const processFailed = Boolean(result.error) || result.status !== 0;
 
   let failureReason;
@@ -174,8 +184,6 @@ for (const testFile of testFiles) {
     if (counts.definite) {
       totalPassed += counts.passed;
       totalFailed += counts.failed;
-    } else {
-      totalPassed += 1;
     }
   }
 }
@@ -201,4 +209,4 @@ if (failedFiles.length > 0) {
 console.log('╚' + '═'.repeat(BOX_W) + '╝');
 console.log(`\nPassed: ${totalPassed}, Failed: ${totalFailed}`);
 
-process.exit(totalFailed > 0 ? 1 : 0);
+process.exitCode = totalFailed > 0 ? 1 : 0;
