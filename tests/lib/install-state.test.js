@@ -423,28 +423,84 @@ function runTests() {
   if (test('concurrent writeInstallState calls always leave a complete valid state', () => {
     const testDir = createTestDir();
     const statePath = path.join(testDir, 'ecc-install-state.json');
-    const markers = ['2026-03-01T00:00:00Z', '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z', '2026-03-04T00:00:00Z'];
+    const markers = [
+      '2026-03-01T00:00:00Z', '2026-03-02T00:00:00Z', '2026-03-03T00:00:00Z',
+      '2026-03-04T00:00:00Z', '2026-03-05T00:00:00Z', '2026-03-06T00:00:00Z',
+      '2026-03-07T00:00:00Z', '2026-03-08T00:00:00Z', '2026-03-09T00:00:00Z',
+    ];
 
     try {
       writeInstallState(statePath, makeState(testDir, statePath, markers[0]));
       const { spawnSync } = require('child_process');
-      const script = 'const {readInstallState, writeInstallState} = require(process.env.REPO_ROOT + "/scripts/lib/install-state");' +
-        'const state = readInstallState(process.env.STATE_PATH);' +
-        'state.lastValidatedAt = process.env.MARKER;' +
-        'writeInstallState(process.env.STATE_PATH, state);';
-      for (const marker of markers.slice(1)) {
-        const child = spawnSync(process.execPath, ['-e', script], {
-          encoding: 'utf8',
-          timeout: 30000,
-          env: {
-            ...process.env,
-            REPO_ROOT: path.join(__dirname, '..', '..'),
-            STATE_PATH: statePath,
-            MARKER: marker,
-          },
+      const supervisor = `
+        const fs = require('fs');
+        const assert = require('assert');
+        const { spawn } = require('child_process');
+        const { readInstallState } = require(process.env.ECC_STATE_MODULE);
+        const markers = JSON.parse(process.env.ECC_STATE_MARKERS);
+        const script = 'const { readInstallState, writeInstallState } = require(process.env.ECC_STATE_MODULE);' +
+          'for (let round = 0; round < 30; round++) {' +
+          'const state = readInstallState(process.env.ECC_STATE_PATH);' +
+          'state.lastValidatedAt = process.env.ECC_STATE_MARKER;' +
+          'writeInstallState(process.env.ECC_STATE_PATH, state); }';
+        const entries = markers.slice(1).map(marker => {
+          const child = spawn(process.execPath, ['-e', script], {
+            stdio: ['ignore', 'ignore', 'pipe'],
+            env: { ...process.env, ECC_STATE_MARKER: marker }
+          });
+          let stderr = '';
+          child.stderr.on('data', chunk => { stderr += chunk; });
+          let spawnError;
+          child.on('error', error => { spawnError = error; });
+          const closed = new Promise(resolve => child.on('close', code => {
+            resolve({ code, stderr, spawnError });
+          }));
+          return { child, closed };
         });
-        assert.strictEqual(child.status, 0, child.stderr);
-      }
+        let deadline;
+        let observer;
+        let observationError;
+        let observations = 0;
+        (async () => {
+          try {
+            observer = setInterval(() => {
+              try {
+                assert.ok(markers.includes(readInstallState(process.env.ECC_STATE_PATH).lastValidatedAt));
+                observations++;
+              } catch (error) { observationError = error; }
+            }, 5);
+            const results = await Promise.race([
+              Promise.all(entries.map(entry => entry.closed)),
+              new Promise((_, reject) => { deadline = setTimeout(() => reject(new Error('writer deadline')), 20000); })
+            ]);
+            if (observationError) throw observationError;
+            assert.ok(observations > 0, 'expected concurrent reads');
+            for (const result of results) {
+              if (result.spawnError) throw result.spawnError;
+              assert.strictEqual(result.code, 0, result.stderr);
+              assert.strictEqual(result.stderr, '');
+            }
+          } finally {
+            clearTimeout(deadline);
+            clearInterval(observer);
+            for (const entry of entries) {
+              if (entry.child.exitCode === null && entry.child.signalCode === null) entry.child.kill('SIGKILL');
+            }
+            await Promise.all(entries.map(entry => entry.closed));
+          }
+        })().catch(error => { console.error(error.stack); process.exitCode = 1; });
+      `;
+      const result = spawnSync(process.execPath, ['-e', supervisor], {
+        encoding: 'utf8',
+        timeout: 30000,
+        env: {
+          ...process.env,
+          ECC_STATE_MODULE: path.join(__dirname, '..', '..', 'scripts', 'lib', 'install-state.js'),
+          ECC_STATE_PATH: statePath,
+          ECC_STATE_MARKERS: JSON.stringify(markers),
+        },
+      });
+      assert.strictEqual(result.status, 0, result.stderr || String(result.error));
       const final = readInstallState(statePath);
       assert.ok(markers.includes(final.lastValidatedAt));
       assert.deepStrictEqual(listStagingFiles(testDir), []);

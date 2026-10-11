@@ -13,6 +13,7 @@ skills:
   - agent-eval
   - agent-harness-construction
   - agent-payment-x402
+  - agent-runtime-gateway-smoke-test
   - agentic-engineering
   - agentic-os
   - ai-first-engineering
@@ -34,6 +35,7 @@ skills:
   - claude-devfleet
   - click-path-audit
   - clickhouse-io
+  - brownfield-retrospective
   - codebase-onboarding
   - coding-standards
   - compose-multiplatform-patterns
@@ -147,6 +149,7 @@ skills:
   - security-review
   - security-scan
   - skill-comply
+  - skill-host-compat
   - skill-stocktake
   - springboot-patterns
   - springboot-security
@@ -172,6 +175,7 @@ skills:
   - x-api
 commands:
   - aside
+  - astra-review
   - auto-update
   - build-fix
   - checkpoint
@@ -261,6 +265,7 @@ commands:
   - setup-pm
   - skill-create
   - skill-health
+  - skill-host-compat
   - test-coverage
   - token-card
   - update-codemaps

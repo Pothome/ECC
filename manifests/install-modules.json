@@ -64,8 +64,12 @@
       "description": "Core slash-command library and command docs.",
       "paths": [
         "commands",
+        "scripts/astra-review.js",
         "scripts/harness-audit.js",
-        "scripts/skills-health.js"
+        "scripts/skills-health.js",
+        "scripts/lib/astra-review",
+        "scripts/ci/validate-skill-host-compat.js",
+        "scripts/ci/validate-skills.js"
       ],
       "targets": [
         "claude",
@@ -354,6 +358,7 @@
         "skills/agent-introspection-debugging",
         "skills/ai-regression-testing",
         "skills/configure-ecc",
+        "skills/deepseek-harness-setup",
         "skills/code-tour",
         "skills/continuous-learning",
         "skills/continuous-learning-v2",
@@ -369,6 +374,7 @@
         "skills/plankton-code-quality",
         "skills/production-audit",
         "skills/skill-comply",
+        "skills/skill-host-compat",
         "skills/skill-scout",
         "skills/skill-stocktake",
         "skills/strategic-compact",
@@ -377,6 +383,7 @@
         "skills/windows-desktop-e2e",
         "skills/agent-self-evaluation",
         "skills/architecture-decision-records",
+        "skills/brownfield-retrospective",
         "skills/browser-qa",
         "skills/ck",
         "skills/click-path-audit",
@@ -719,7 +726,7 @@
     {
       "id": "ito-compute",
       "kind": "skills",
-      "description": "Authenticated It\u00f4 GPU inventory, RFQ, status, device revocation, and explicitly gated node-qualification workflows through the separately installed canonical CLI.",
+      "description": "Authenticated Itô GPU inventory, RFQ, status, device revocation, and explicitly gated node-qualification workflows through the separately installed canonical CLI.",
       "paths": [
         "skills/ito-compute",
         "skills/ito-inference",
@@ -941,6 +948,7 @@
         "skills/autonomous-agent-harness",
         "skills/gan-style-harness",
         "skills/hermes-imports",
+        "skills/agent-runtime-gateway-smoke-test",
         "skills/openclaw-persona-forge",
         "skills/opensource-pipeline",
         "skills/orch-add-feature",
@@ -1292,6 +1300,22 @@
       "description": "Polish (pl) getting-started and core-concepts guide with a terminology glossary.",
       "paths": [
         "docs/pl"
+      ],
+      "targets": [
+        "claude",
+        "claude-project"
+      ],
+      "dependencies": [],
+      "defaultInstall": false,
+      "cost": "heavy",
+      "stability": "stable"
+    },
+    {
+      "id": "docs-ar",
+      "kind": "docs",
+      "description": "Arabic (ar) getting-started and core-concepts guide with a terminology glossary.",
+      "paths": [
+        "docs/ar"
       ],
       "targets": [
         "claude",

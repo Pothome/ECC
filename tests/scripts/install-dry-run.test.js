@@ -39,6 +39,9 @@ function makeEnv(homeDir) {
     XDG_CONFIG_HOME: path.join(homeDir, '.config'),
   };
   delete env.ECC_DRY_RUN;
+  delete env.CLAUDE_CONFIG_DIR;
+  delete env.ECC_AGENT_DATA_HOME;
+  delete env.OPENCODE_CONFIG_DIR;
   return env;
 }
 
@@ -77,6 +80,7 @@ function testInstallForms() {
       const result = runEcc(args, context);
       assert.strictEqual(result.status, 0, result.stderr);
       assert.deepStrictEqual(walkFiles(context.homeDir), []);
+      assert.deepStrictEqual(walkFiles(context.projectRoot), []);
       assert.deepStrictEqual(findStateFiles(context.homeDir), []);
     });
   }
@@ -112,8 +116,37 @@ function testRepairForms() {
   }
 }
 
+function testDryRunEnvironment() {
+  for (const value of ['1', 'true', '']) {
+    test(`direct install honors or rejects ECC_DRY_RUN=${JSON.stringify(value)}`, context => {
+      const result = spawnSync(process.execPath, [eccCli, 'install', '--target', 'cursor', '--modules', 'rules-core'], {
+        cwd: context.projectRoot,
+        encoding: 'utf8',
+        timeout: 120000,
+        env: { ...makeEnv(context.homeDir), ECC_DRY_RUN: value },
+      });
+      assert.strictEqual(result.status, value === '1' ? 0 : 1, result.stderr);
+      if (value !== '1') assert.ok(result.stderr.includes('ECC_DRY_RUN'));
+      assert.deepStrictEqual(walkFiles(context.homeDir), []);
+      assert.deepStrictEqual(walkFiles(context.projectRoot), []);
+    });
+  }
+  test('explicit dry-run remains active with ECC_DRY_RUN=0', context => {
+    const result = spawnSync(process.execPath, [eccCli, 'install', '--target', 'cursor', '--modules', 'rules-core', '--dry-run'], {
+      cwd: context.projectRoot,
+      encoding: 'utf8',
+      timeout: 120000,
+      env: { ...makeEnv(context.homeDir), ECC_DRY_RUN: '0' },
+    });
+    assert.strictEqual(result.status, 0, result.stderr);
+    assert.deepStrictEqual(walkFiles(context.homeDir), []);
+    assert.deepStrictEqual(walkFiles(context.projectRoot), []);
+  });
+}
+
 console.log('\nInstall dry-run CLI regression tests:\n');
 testInstallForms();
+testDryRunEnvironment();
 testRepairForms();
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
