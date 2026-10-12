@@ -62,6 +62,9 @@ function validateStep(scenario, step, index) {
   if (!step.payload || typeof step.payload !== 'object') fail(`${where}: missing payload`);
   if (typeof step.payload.tool_name !== 'string') fail(`${where}: payload.tool_name must be a string`);
   if (!EXPECTATIONS.has(step.expect)) fail(`${where}: expect must be deny or allow`);
+  if (step.expectOnWindows !== undefined && step.expectOnWindows !== 'deny') {
+    fail(`${where}: expectOnWindows may only strengthen the expectation to deny`);
+  }
   if (typeof step.mustDeny !== 'boolean') fail(`${where}: mustDeny must be a boolean`);
   if (typeof step.redundant !== 'boolean') fail(`${where}: redundant must be a boolean`);
   if (step.mustDeny && step.expect !== 'deny') fail(`${where}: mustDeny requires expect deny`);
@@ -86,7 +89,7 @@ function validateScenario(scenario, file) {
 }
 
 /** Load and validate every scenario file in a corpus directory, sorted by file name. */
-function loadCorpus(dir = DEFAULT_CORPUS_DIR) {
+function loadCorpus(dir = DEFAULT_CORPUS_DIR, platform = process.platform) {
   return fs
     .readdirSync(dir)
     .filter(name => name.endsWith('.json'))
@@ -94,7 +97,12 @@ function loadCorpus(dir = DEFAULT_CORPUS_DIR) {
     .map(name => {
       const scenario = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'));
       validateScenario(scenario, name);
-      return { ...scenario, file: name };
+      // Folded Windows filenames cannot prove case-sensitive type coverage.
+      // Normalize the shared corpus so assertions, summaries and SARIF agree.
+      const steps = scenario.steps.map(step => platform === 'win32' && step.expectOnWindows === 'deny'
+        ? { ...step, expect: 'deny', mustDeny: true, redundant: false }
+        : step);
+      return { ...scenario, steps, file: name };
     });
 }
 

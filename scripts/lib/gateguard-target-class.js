@@ -186,7 +186,7 @@ const CLASS_QUESTIONS = Object.fromEntries(
 );
 
 // see docs/gateguard/change-profile.md#questions-from-the-change-profile
-function codeQuestionIds(isWrite, profile) {
+function codeQuestionIds(isWrite, profile, externalContract) {
   const known = Boolean(profile) && profile.known === true;
   const surface = !known || profile.touchesPublicSurface !== false;
   const data = !known || profile.touchesData !== false;
@@ -194,8 +194,14 @@ function codeQuestionIds(isWrite, profile) {
   // A change that handles data is usually constrained by something outside the
   // tree - a consumer's dialect, a reporting timezone, a protocol's semantics -
   // and the repository cannot settle it. data-schema asks what the change
-  // touches; external-contract asks who decides what it has to be.
-  return data ? [...opening, 'data-schema', 'external-contract'] : opening;
+  // touches; external-contract asks who decides what it has to be. It is
+  // opt-in: see docs/gateguard/change-profile.md#external-contract-question.
+  if (!data) return opening;
+  return externalContract ? [...opening, 'data-schema', 'external-contract'] : [...opening, 'data-schema'];
+}
+
+function asksExternalContract(options) {
+  return Boolean(options) && options.externalContract === true;
 }
 
 /** True when a class's questions depend on the change profile. */
@@ -203,9 +209,14 @@ function questionsUseProfile(cls) {
   return !Object.hasOwn(CLASS_QUESTION_IDS, cls);
 }
 
-/** Stable ids of the first-touch questions for a class, action and change profile. */
-function questionIdsFor(cls, isWrite, profile) {
-  const ids = Object.hasOwn(CLASS_QUESTION_IDS, cls) ? CLASS_QUESTION_IDS[cls](Boolean(isWrite)) : codeQuestionIds(Boolean(isWrite), profile);
+/**
+ * Stable ids of the first-touch questions for a class, action and change profile.
+ * `options.externalContract === true` adds the opt-in external-contract question.
+ */
+function questionIdsFor(cls, isWrite, profile, options) {
+  const ids = Object.hasOwn(CLASS_QUESTION_IDS, cls)
+    ? CLASS_QUESTION_IDS[cls](Boolean(isWrite))
+    : codeQuestionIds(Boolean(isWrite), profile, asksExternalContract(options));
   return [...ids, 'quote-instruction'];
 }
 
@@ -215,6 +226,8 @@ function questionText(id) {
 }
 
 const CODE_CONDENSED_HINT =
+  "briefly state importers/callers, affected API, data schemas if any, and the user's verbatim instruction, then retry.";
+const CODE_CONDENSED_HINT_EXTERNAL_CONTRACT =
   "briefly state importers/callers, affected API, data schemas if any, what outside the repository fixes the format or semantics, and the user's verbatim instruction, then retry.";
 
 const CONDENSED_PHRASES = Object.freeze({
@@ -252,10 +265,12 @@ const CLASS_CONDENSED_HINTS = {
 };
 
 /** One-line condensed hint matching `questionIdsFor`. */
-function condensedHintFor(cls, isWrite, profile) {
+function condensedHintFor(cls, isWrite, profile, options) {
   if (Object.hasOwn(CLASS_CONDENSED_HINTS, cls)) return CLASS_CONDENSED_HINTS[cls](Boolean(isWrite));
-  if (!isWrite && !(profile && profile.known === true)) return CODE_CONDENSED_HINT;
-  const phrases = questionIdsFor(cls, isWrite, profile).map(condensedQuestionPhrase).filter(Boolean);
+  if (!isWrite && !(profile && profile.known === true)) {
+    return asksExternalContract(options) ? CODE_CONDENSED_HINT_EXTERNAL_CONTRACT : CODE_CONDENSED_HINT;
+  }
+  const phrases = questionIdsFor(cls, isWrite, profile, options).map(condensedQuestionPhrase).filter(Boolean);
   return `briefly state ${joinPhrases(phrases)}, then retry.`;
 }
 

@@ -301,7 +301,11 @@ function codeSignature(text, spec) {
   return signature;
 }
 
+// JavaScript ends a line at U+2028 and U+2029, and C# also at U+0085; the lexer splits only at \n and \r.
+const UNICODE_LINE_TERMINATORS = /[\u0085\u2028\u2029]/;
+
 function isTrivialEdit(oldString, newString, spec) {
+  if (UNICODE_LINE_TERMINATORS.test(oldString) || UNICODE_LINE_TERMINATORS.test(newString)) return false;
   if (spec.lineComment === '//' && (oldString.includes('??/') || newString.includes('??/'))) return false;
   const before = codeSignature(oldString, spec);
   if (before === null) return false;

@@ -1945,9 +1945,14 @@ function batchSiblingWarning(safePath) {
   );
 }
 
+// see docs/gateguard/change-profile.md#external-contract-question
+function questionOptions() {
+  return { externalContract: ECC_ENABLE_VALUES.has(normalizeEnvValue(process.env.GATEGUARD_EXTERNAL_CONTRACT_QUESTION)) };
+}
+
 function firstTouchGateMsg(filePath, isWrite, cls, profile) {
   const safe = sanitizePath(filePath);
-  const questions = questionIdsFor(cls, isWrite, profile).map(questionText);
+  const questions = questionIdsFor(cls, isWrite, profile, questionOptions()).map(questionText);
   return [
     '[Fact-Forcing Gate]',
     '',
@@ -1968,7 +1973,7 @@ function firstTouchGateMsg(filePath, isWrite, cls, profile) {
  */
 function condensedGateMsg(action, filePath, ordinal, cls = 'code', targetNote = '', profile = null, missNote = '') {
   const safe = sanitizePath(filePath);
-  const hint = condensedHintFor(cls, action === 'creation', profile);
+  const hint = condensedHintFor(cls, action === 'creation', profile, questionOptions());
   return (
     `[Fact-Forcing Gate] (denial #${ordinal} this session) First ${action} of ${safe}: ` +
     `${hint} ` +
@@ -2009,7 +2014,7 @@ function firstTouchDenial(filePath, { isWrite, denials, cls, sensitive, linked =
     cls,
     sensitive,
     profile,
-    questions: questionIdsFor(cls, isWrite, profile)
+    questions: questionIdsFor(cls, isWrite, profile, questionOptions())
   });
   if (denials > getFullDenialBudget()) {
     const action = isWrite ? 'creation' : 'edit';
@@ -2117,6 +2122,7 @@ function creditNote(match, filePath) {
 const MISS_DETAIL_MAX_CHARS = 60;
 const MISS_REASON_TEXT = Object.freeze({
   'same-batch': 'it was sent in the same batch as this call, so its result was not seen yet',
+  lookup: 'it only looked this file up by its own name, so it found nothing that uses it',
   excluded: 'its filters exclude this file',
   'out-of-scope': 'its search path does not contain this file',
   'stdin-only': 'it searched piped input, not the tree',

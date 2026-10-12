@@ -31,7 +31,8 @@ and trivial edits) is in [change-profile.md](change-profile.md).
   [Stdin is not a tree search](#stdin-is-not-a-tree-search),
   [Search scope](#search-scope), [Stem matching](#stem-matching),
   [Test stems](#test-stems), [Search filters](#search-filters),
-  [Include filters](#include-filters),
+  [Include filters](#include-filters), [Type filters](#type-filters),
+  [Path patterns](#path-patterns),
   [Glob matching without RegExp](#glob-matching-without-regexp),
   [Flag parsing](#flag-parsing),
   [PowerShell parameter binding](#powershell-parameter-binding).
@@ -207,7 +208,9 @@ their absolute path. A Windows-style path has no real location on a POSIX host
 The first matching class wins: instruction, test, prose, config, code (the
 fallback). Cursor `.mdc` rule files are instructions wherever they live. A
 basename starting with `.env` is config unless it has a code extension
-(`.env.example.ts` is source). Code targets ask the original four questions,
+(`.env.example.ts` is source). Code targets ask the original four questions
+(five with the opt-in
+[external-contract question](change-profile.md#external-contract-question)),
 narrowed by the change profile (see
 [Questions from the change profile](change-profile.md#questions-from-the-change-profile)); other
 classes get class-specific questions and a class-specific condensed hint.
@@ -280,7 +283,12 @@ evidence.
 Each search offers stem texts, candidate directories, the scope the target must
 lie in, and path operands. The target must lie inside the scope. A search whose
 operands are all the target itself read the target rather than searched for it,
-and gives nothing. A `Glob` without glob characters is a single-file lookup: it
+and gives nothing. The same holds for a search confined to the target's own
+file name: when every include glob, or the Glob pattern, or every path pattern
+ends in the target's file name with no glob characters (`**/tokenizer.js`,
+`find -name tokenizer.js`, `rg -g tokenizer.js`), the search could only find
+the target, so its stem never credits; the closest-miss note says it was a
+lookup. A `Glob` without glob characters is a single-file lookup: it
 names no directory. A `Glob` with an empty literal prefix and no explicit path
 names only the implicit cwd, so it gives no directory credit. Directory
 evidence from shell operands must name a directory that exists now.
@@ -349,6 +357,30 @@ leading `**/` lets it start at any directory; the other tools match names only,
 so such a glob admits nothing. An include glob that is malformed, past the
 matching bounds, or one of more than 32 filters admits nothing.
 
+## Type filters
+
+A file-type filter is an include or exclusion in another spelling, so it
+filters the same way. `rg -t`/`--type` adds the type's globs as includes and
+`rg -T`/`--type-not` adds them as exclusions, using ripgrep 14.1's built-in
+globs for common languages. A type name outside that table, `--type-add` and
+`--type-clear` redefine what a type means, so they make the search an
+unreadable filter that never credits. `fd -e`/`--extension` is an include of
+`*.<ext>`. The `Grep` tool's `type` parameter is read like `rg -t`.
+
+## Path patterns
+
+A glob in a path argument limits the files a search sees just as an include
+does, so it must match the target for the stem to count. The `Glob` tool's
+pattern is matched against the target's path below its root, with `*` inside
+one directory and `**` across directories. A shell path operand with glob
+characters (`rg x src/*.py`) is expanded by the shell before the search runs;
+it admits the target when it matches the target or a directory above it,
+since a matched directory is searched recursively. A git pathspec
+(`git grep x -- '*.py'`) matches the same way, except that its `*` also
+matches `/`. Literal operands keep their scope rule, and one operand that
+admits the target is enough. PowerShell escapes with a backtick, so a
+PowerShell search is tokenized with its backslashes kept as path separators.
+
 ## Glob matching without RegExp
 
 Filter globs are matched by dynamic programming over glob tokens, never by a
@@ -366,7 +398,8 @@ Only path operands can scope a search:
 - for grep-family tools, `rg`, `git grep`, `Select-String` and `fd`, the first
   positional is the pattern unless `-e`/`-f` (grep family, `rg`, `git grep`
   only; fd's `-e` is an extension) supplied it;
-- fd's `-E/--exclude` takes a value; rg's `-r/--replace` takes a value.
+- fd's `-E/--exclude` and `--extension` take a value; rg's `-r/--replace`,
+  `--type-not`, `--type-add` and `--type-clear` take a value.
 
 ## PowerShell parameter binding
 

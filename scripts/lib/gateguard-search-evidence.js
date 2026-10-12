@@ -12,7 +12,9 @@ const {
   grepToolFilters,
   shellSearchFilters,
   filtersAdmitTarget,
-  includesAdmitTarget
+  includesAdmitTarget,
+  pathPatternFor,
+  confinedToTargetName
 } = require('./gateguard-search-filters');
 
 // --- Search commands and flags ---
@@ -141,6 +143,11 @@ function globLiteralPrefix(pattern) {
   return joined || (literal.length > 0 && pattern.startsWith('/') ? '/' : '');
 }
 
+function grepDetail(input) {
+  const flags = [['--glob', input.glob], ['--type', input.type]].filter(([, value]) => typeof value === 'string' && value);
+  return [input.pattern].concat(flags.map(([flag, value]) => `${flag} ${value}`)).join(' ');
+}
+
 function stringsOf(...values) {
   return values.filter(value => typeof value === 'string' && value);
 }
@@ -165,16 +172,22 @@ function operandScopePath(arg) {
   return literal.join('/') || '/';
 }
 
-function shellSearchScopes(parsed, base) {
-  if (parsed.operands.length === 0) return base === null ? [] : [base];
+// see docs/gateguard/design-notes.md#path-patterns
+function shellSearchScopes(kind, parsed, base) {
+  if (parsed.operands.length === 0) return { scopes: base === null ? [] : [base], patterns: [] };
   const scopes = [];
+  const patterns = [];
+  // A shell glob is expanded before the search runs; a git pathspec's `*` also matches `/`.
+  const options = { crossSegments: kind.startsWith('git '), ancestors: true };
   for (const operand of parsed.operands) {
     if (!operand || operand === '-' || /^[$~]/.test(operand)) continue;
     const scoped = operandScopePath(operand);
-    if (isAbsoluteShellPath(scoped)) scopes.push([scoped]);
-    else if (base !== null) scopes.push(base.concat(scoped));
+    const root = isAbsoluteShellPath(scoped) ? [] : base;
+    if (root === null) continue;
+    scopes.push(root.concat(scoped));
+    patterns.push(operand.startsWith(':') ? null : pathPatternFor(root, operand, options));
   }
-  return scopes;
+  return { scopes, patterns };
 }
 
 function isRecursiveFlag(kind, arg) {
@@ -272,6 +285,12 @@ function evidenceInScope(item, ctx) {
   return true;
 }
 
+// A search credits by stem when it names the stem, saw the target, and was not a lookup of the target itself.
+function stemCredits(item, ctx, stem) {
+  if (!includesAdmitTarget(item, ctx) || confinedToTargetName(item, ctx)) return false;
+  return item.texts.some(text => stem.test(text.toLowerCase()));
+}
+
 function evidenceNamesDir(item, ctx) {
   return item.dirs.some(
     parts => ctx.resolveDir(...parts) === ctx.targetDir && (!item.dirsMustExist || isDirectoryNow(ctx.resolveNative(...parts)))
@@ -281,7 +300,9 @@ function evidenceNamesDir(item, ctx) {
 // --- Prior-search credit ---
 
 const MIN_GENERIC_MISS_STEM = 3;
-const MISS_RANK = Object.freeze({ 'same-batch': 0, excluded: 1, 'out-of-scope': 2, 'stdin-only': 3, 'not-a-search': 4, 'generic-stem': 5 });
+const MISS_RANK = Object.freeze({
+  'same-batch': 0, lookup: 1, excluded: 2, 'out-of-scope': 3, 'stdin-only': 4, 'not-a-search': 5, 'generic-stem': 6
+});
 
 /** Build the prior-search matcher around the hook's shell segmenter. */
 function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGMENT_SEPARATORS }) {
@@ -297,13 +318,15 @@ function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGME
         return [{ texts: [input.pattern], dirs: [], scope, scopeExact: true, operands: [lookup], detail: input.pattern }];
       }
       const dirs = prefix || explicit ? [scope] : [];
-      return [{ texts: [input.pattern], dirs, scope, detail: input.pattern }];
+      // see docs/gateguard/design-notes.md#path-patterns
+      const pathPattern = pathPatternFor([explicit || '.'], input.pattern);
+      return [{ texts: [input.pattern], dirs, scope, detail: input.pattern, pathPattern }];
     }
     if (search.name === 'Grep') {
       if (typeof input.pattern !== 'string' || !input.pattern) return [];
       const explicit = typeof input.path === 'string' && input.path ? input.path : '';
-      const detail = typeof input.glob === 'string' && input.glob ? `${input.pattern} --glob ${input.glob}` : input.pattern;
-      const filters = grepToolFilters(input.glob);
+      const detail = grepDetail(input);
+      const filters = grepToolFilters(input.glob, input.type);
       return [{
         texts: stringsOf(input.pattern, ...filters.positives),
         dirs: explicit ? [[explicit]] : [],
@@ -316,7 +339,7 @@ function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGME
     if (search.name === 'LS') {
       return stringsOf(input.path).map(dir => ({ texts: [], dirs: [[dir]], scope: [dir], detail: dir }));
     }
-    return shellSearchEvidence(input.command, shellDirsTrusted, misses);
+    return shellSearchEvidence(input.command, search.name, shellDirsTrusted, misses);
   }
 
   function segmentPipeFlags(input) {
@@ -351,9 +374,28 @@ function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGME
     return flags;
   }
 
-  function shellSearchEvidence(command, dirsTrusted, misses) {
-    if (typeof command !== 'string' || !command || command.length > MAX_SEARCH_COMMAND_CHARS) return [];
-    if (AMBIGUOUS_SHELL_PATTERN.test(command)) return [];
+  function powershellPathInput(rawCommand) {
+    let quote = null;
+    let command = '';
+    for (let i = 0; i < rawCommand.length; i += 1) {
+      const ch = rawCommand[i];
+      // The shared shell tokenizer concatenates adjacent quoted spans. In
+      // PowerShell doubled apostrophes represent a literal apostrophe instead.
+      // Refuse that unsupported form rather than crediting a different scope.
+      if (ch === "'" && quote === "'" && rawCommand[i + 1] === "'") return null;
+      if (ch === "'" && quote !== '"') quote = quote === "'" ? null : "'";
+      else if (ch === '"' && quote !== "'") quote = quote === '"' ? null : '"';
+      command += ch === '\\' && quote !== "'" ? '\\\\' : ch;
+    }
+    return command;
+  }
+
+  function shellSearchEvidence(rawCommand, toolName, dirsTrusted, misses) {
+    if (typeof rawCommand !== 'string' || !rawCommand || rawCommand.length > MAX_SEARCH_COMMAND_CHARS) return [];
+    if (AMBIGUOUS_SHELL_PATTERN.test(rawCommand)) return [];
+    // PowerShell escapes with a backtick, so a backslash there is a path separator, not an escape.
+    const command = toolName === 'PowerShell' ? powershellPathInput(rawCommand) : rawCommand;
+    if (command === null) return [];
     const pipeFlags = segmentPipeFlags(command);
     const evidence = [];
     let trusted = dirsTrusted;
@@ -381,7 +423,7 @@ function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGME
         miss('stdin-only');
         return;
       }
-      const scopes = shellSearchScopes(parsed, base);
+      const { scopes, patterns } = shellSearchScopes(kind, parsed, base);
       if (scopes.length === 0) return;
       const filters = shellSearchFilters(kind, args);
       // see docs/gateguard/design-notes.md#search-filters
@@ -392,6 +434,7 @@ function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGME
         dirs,
         dirsMustExist: true,
         scopes,
+        scopePatterns: patterns,
         operands: parsed.operands.map(op => [op]),
         detail: tokens.join(' '),
         exclusions: filters.exclusions,
@@ -455,7 +498,7 @@ function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGME
         if (shellDirsTrusted === null) shellDirsTrusted = shellDirsTrustedFor(scan);
         for (const item of cachedEvidence(search, shellDirsTrusted).items) {
           if (!evidenceInScope(item, ctx) || !filtersAdmitTarget(item, ctx, stem)) continue;
-          const byStem = stem !== null && includesAdmitTarget(item, ctx) && item.texts.some(text => stem.test(text.toLowerCase()));
+          const byStem = stem !== null && stemCredits(item, ctx, stem);
           const byDir = Boolean(allowDirMatch) && evidenceNamesDir(item, ctx);
           if (byStem || byDir) {
             return { name: search.name, detail: item.detail, callsAgo: search.callsAgo };
@@ -484,7 +527,9 @@ function createSearchEvidence({ quoteAwareSegments, commandBasename, SHELL_SEGME
     const inScope = evidenceInScope(item, ctx);
     const admitted = filtersAdmitTarget(item, ctx, stem);
     const included = includesAdmitTarget(item, ctx);
-    if (inScope && admitted && (byDir || included)) return sameBatch ? 'same-batch' : null;
+    const lookup = included && confinedToTargetName(item, ctx);
+    if (inScope && admitted && (byDir || (included && !lookup))) return sameBatch ? 'same-batch' : null;
+    if (inScope && admitted && lookup) return 'lookup';
     if (!inScope) return 'out-of-scope';
     return 'excluded';
   }

@@ -109,8 +109,10 @@ if [[ -f "$CONFIG_FILE" ]]; then
   # Named profiles ship as sibling files: Codex 0.134.0+ reads
   # `<CODEX_HOME>/<name>.config.toml` for `codex -p <name>` and rejects
   # legacy `[profiles.<name>]` tables inside config.toml.
-  require_file "$CODEX_HOME/strict.config.toml" "strict profile"
-  require_file "$CODEX_HOME/yolo.config.toml" "yolo profile"
+  require_file "$CODEX_HOME/strict.config.toml" "strict named profile"
+  require_file "$CODEX_HOME/yolo.config.toml" "yolo named profile"
+  check_config_absent '^[[:space:]]*\[profiles[.]' "legacy profile tables are absent (migrate to named .config.toml files)"
+  check_config_absent '^[[:space:]]*profile[[:space:]]*=' "legacy profile selector is absent"
 
   # Current default connector set (docs/MCP-CONNECTOR-POLICY.md): exactly
   # one connector. Former defaults (github, memory, sequential-thinking,

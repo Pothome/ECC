@@ -67,6 +67,44 @@ function results(log) {
 
 console.log('\n=== Testing gateguard-eval ===\n');
 
+test('the corpus preserves POSIX type credit and requires denial for folded Windows names', () => {
+  const posix = loadCorpus(undefined, 'linux');
+  const windows = loadCorpus(undefined, 'win32');
+  const typeStep = corpus => corpus.find(scenario => scenario.name === 'bypass-filter-forms')
+    .steps.find(candidate => candidate.id === 'rg-type-includes-target');
+  assert.strictEqual(typeStep(posix).expect, 'allow');
+  assert.strictEqual(typeStep(posix).redundant, true);
+  assert.strictEqual(typeStep(windows).expect, 'deny');
+  assert.strictEqual(typeStep(windows).mustDeny, true);
+  assert.strictEqual(typeStep(windows).redundant, false);
+  posix.forEach((scenario, index) => scenario.steps.forEach((candidate, at) => {
+    if (candidate.mustDeny) assert.deepStrictEqual(windows[index].steps[at], candidate);
+  }));
+  const scenario = windows.find(candidate => candidate.name === 'bypass-filter-forms');
+  const expected = typeStep(windows);
+  const run = decision => [{ scenario: { ...scenario, steps: [expected] }, results: [{
+    decision, kind: decision === 'deny' ? 'deny' : 'credit', latencyMs: 0, reason: ''
+  }] }];
+  assert.strictEqual(summarize(run('deny')).totals.mismatches, 0);
+  assert.strictEqual(summarize(run('deny')).totals.redundantDenials, 0);
+  assert.strictEqual(summarize(run('allow')).totals.mustDenyBypasses, 1);
+});
+
+test('Windows corpus overrides only strengthen denial and reject invalid values on every host', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'gateguard-platform-corpus-'));
+  try {
+    const scenario = loadCorpus()[0];
+    for (const expectOnWindows of ['allow', 'invalid', false]) {
+      fs.writeFileSync(path.join(dir, 'fixture.json'), JSON.stringify({
+        ...scenario, steps: [{ ...scenario.steps[0], expectOnWindows }]
+      }));
+      for (const platform of ['linux', 'win32']) assert.throws(() => loadCorpus(dir, platform), /expectOnWindows/);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('--sarif takes a file path and keeps the other options', () => {
   const options = parseArgs(['--json', '--sarif', 'out/gate.sarif', '--baseline', 'main']);
   assert.strictEqual(options.format, 'json');

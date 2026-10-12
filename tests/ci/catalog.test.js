@@ -225,6 +225,44 @@ function runTests() {
     }
   })) passed++; else failed++;
 
+  if (test('rejects unmarked skill undercounts in English and Chinese agent trees', () => {
+    const testDir = createTestDir();
+    try {
+      writeCatalogFixture(testDir, { actualCounts: { agents: 1, skills: 2, commands: 1 } });
+      for (const relativePath of ['AGENTS.md', 'docs/zh-CN/AGENTS.md']) {
+        const filePath = path.join(testDir, relativePath);
+        fs.writeFileSync(filePath, fs.readFileSync(filePath, 'utf8').replace('skills/ - 2 ', 'skills/ - 1 '));
+      }
+      const result = runCatalogCheck({ root: testDir });
+      for (const source of ['AGENTS.md project structure (skills)', 'docs/zh-CN/AGENTS.md project structure (skills)']) {
+        const check = result.checks.find(entry => entry.source === source);
+        assert.ok(check, `Missing check for ${source}`);
+        assert.strictEqual(check.ok, false, `${source} must reject an exact undercount`);
+      }
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
+  if (test('accepts explicitly marked lower-bound skill counts in agent trees', () => {
+    const testDir = createTestDir();
+    try {
+      writeCatalogFixture(testDir, { actualCounts: { agents: 1, skills: 2, commands: 1 } });
+      for (const relativePath of ['AGENTS.md', 'docs/zh-CN/AGENTS.md']) {
+        const filePath = path.join(testDir, relativePath);
+        fs.writeFileSync(filePath, fs.readFileSync(filePath, 'utf8').replace('skills/ - 2 ', 'skills/ - 1+ '));
+      }
+      const result = runCatalogCheck({ root: testDir });
+      for (const source of ['AGENTS.md project structure (skills)', 'docs/zh-CN/AGENTS.md project structure (skills)']) {
+        const check = result.checks.find(entry => entry.source === source);
+        assert.ok(check, `Missing check for ${source}`);
+        assert.strictEqual(check.ok, true, `${source} must preserve explicit lower-bound semantics`);
+      }
+    } finally {
+      cleanupTestDir(testDir);
+    }
+  })) passed++; else failed++;
+
   if (test('reports mismatches from every tracked catalog document', () => {
     const testDir = createTestDir();
     try {

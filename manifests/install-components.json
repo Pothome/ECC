@@ -213,7 +213,7 @@
     {
       "id": "capability:ito-compute",
       "family": "capability",
-      "description": "Authenticated Itô GPU inventory, RFQ, status, device revocation, and explicitly gated node-qualification workflows through the separately installed canonical CLI.",
+      "description": "Authenticated It\u00f4 GPU inventory, RFQ, status, device revocation, and explicitly gated node-qualification workflows through the separately installed canonical CLI.",
       "modules": [
         "ito-compute"
       ]
@@ -380,6 +380,14 @@
       "description": "Supply chain, logistics, procurement, and manufacturing domain skills.",
       "modules": [
         "supply-chain-domain"
+      ]
+    },
+    {
+      "id": "capability:documentation-context",
+      "family": "capability",
+      "description": "Optional durable domain-context and ADR handoff workflow.",
+      "modules": [
+        "documentation-context"
       ]
     },
     {
@@ -716,6 +724,22 @@
       "description": "Arabic (ar) translated reference docs installed to ~/.claude/docs/ar/.",
       "modules": [
         "docs-ar"
+      ]
+    },
+    {
+      "id": "capability:documentation-change-impact",
+      "family": "capability",
+      "description": "Optional read-only change-impact analysis workflow.",
+      "modules": [
+        "documentation-change-impact"
+      ]
+    },
+    {
+      "id": "capability:documentation-test-regression",
+      "family": "capability",
+      "description": "Optional test-collaboration and module-regression workflow.",
+      "modules": [
+        "documentation-test-regression"
       ]
     }
   ]

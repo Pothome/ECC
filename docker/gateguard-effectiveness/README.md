@@ -21,14 +21,28 @@ where the deciding fact exists only in a simulated user's hidden intent, so an
 agent that does not ask can only guess. Scenario files omit declared gate
 question targets, but this does not establish blind or independent authorship:
 the authors knew the taxonomy, and the external-contract question was added
-after inspecting this corpus. Treat those results as exploratory. The report
-classifies behavior into descriptive hole categories.
+after inspecting this corpus. Treat those results as exploratory. That question
+is now opt-in (`GATEGUARD_EXTERNAL_CONTRACT_QUESTION`), and the runner clears
+every `GATEGUARD_*` variable from the agent's environment, so a `gate` arm
+built from a current candidate tree runs without it. The report classifies
+behavior into descriptive hole categories.
 
 Each run writes `meta.json`, raw `results.jsonl`, transcripts, `summary.json`,
 `holes.md`, and `evidence.json`. The evidence manifest fingerprints the frozen
 scenario and harness inputs and hashes the output artifacts. Verify an output
 directory with `--verify`; this detects later file changes but is not a
 cryptographic signature or proof of who ran the experiment.
+
+`run-intent.js --check-graders`, and each intent run before it bills a session, requires each
+grader to score `reference` 1 and the start workspace, the `naive` trap and every
+`decoy-*` overlay below 1. A decoy has the right shape and the wrong content, so
+a grader that checks only the form fails the check. Both runners count only valid
+trials: authentication-related provider errors stop the run before the attempt
+is appended to `results.jsonl`. The transcript is retained, but there is no
+attempt record. Other provider-error or timeout attempts stay in `results.jsonl`
+with their own transcripts, are reported apart, and are retried on resume.
+A gated trial whose hook never ran also stops the run without a `results.jsonl`
+record.
 
 ```bash
 node docker/gateguard-effectiveness/run-intent.js --check-graders

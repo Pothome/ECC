@@ -163,8 +163,9 @@ test('quoted staged paths and untracked paths share identity, and untracked fail
     assert.ok(snapshot.agents.every(agent => agent.files.includes(file)));
     for (const code of ['EACCES', 'ETIMEDOUT', 'ENOBUFS']) {
       childProcess.execFileSync = (command, args, options) => {
+        assert.strictEqual(command, 'git', 'fixture only forwards Git probes');
         if (args.includes('ls-files')) throw Object.assign(new Error('untracked probe unavailable'), { code });
-        return originalExec(command, args, options);
+        return originalExec('git', args, { ...options, shell: false });
       };
       delete require.cache[modulePath];
       const fresh = require(modulePath);
@@ -172,8 +173,9 @@ test('quoted staged paths and untracked paths share identity, and untracked fail
       assert.ok(tracked, `${code}: tracked changes must survive`);
       assert.deepStrictEqual(tracked.files.map(entry => entry.path).sort(), ['README', file].sort());
       childProcess.execFileSync = (command, args, options) => {
+        assert.strictEqual(command, 'git', 'fixture only forwards Git probes');
         if (args.includes('--name-only')) throw Object.assign(new Error('tracked names unavailable'), { code });
-        return originalExec(command, args, options);
+        return originalExec('git', args, { ...options, shell: false });
       };
       delete require.cache[modulePath];
       const partial = require(modulePath).sessionsToAgents([worktrees[0]]);

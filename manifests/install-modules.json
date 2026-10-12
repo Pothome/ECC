@@ -67,6 +67,7 @@
         "scripts/astra-review.js",
         "scripts/harness-audit.js",
         "scripts/skills-health.js",
+        "scripts/lib/skill-evolution",
         "scripts/lib/astra-review",
         "scripts/ci/validate-skill-host-compat.js",
         "scripts/ci/validate-skills.js"
@@ -87,7 +88,9 @@
         "kimi",
         "adal"
       ],
-      "dependencies": [],
+      "dependencies": [
+        "shared-script-utils"
+      ],
       "defaultInstall": true,
       "cost": "medium",
       "stability": "stable"
@@ -147,9 +150,6 @@
         "scripts/auto-update.js",
         "scripts/setup-package-manager.js",
         "scripts/lib/package-manager.js",
-        "scripts/lib/utils.js",
-        "scripts/lib/agent-data-home.js",
-        "scripts/lib/path-safety.js",
         ".hermes",
         ".openclaw",
         ".kimi",
@@ -173,7 +173,9 @@
         "kimi",
         "adal"
       ],
-      "dependencies": [],
+      "dependencies": [
+        "shared-script-utils"
+      ],
       "defaultInstall": true,
       "cost": "light",
       "stability": "stable"
@@ -350,6 +352,36 @@
       "stability": "stable"
     },
     {
+      "id": "documentation-context",
+      "kind": "skills",
+      "description": "Optional durable domain-context and ADR handoff workflow.",
+      "paths": [
+        "skills/context-and-decisions"
+      ],
+      "targets": [
+        "claude",
+        "claude-project",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode",
+        "codebuddy",
+        "joycode",
+        "qwen",
+        "zed",
+        "hermes",
+        "openclaw",
+        "kimi",
+        "adal"
+      ],
+      "dependencies": [
+        "workflow-quality"
+      ],
+      "defaultInstall": false,
+      "cost": "light",
+      "stability": "beta"
+    },
+    {
       "id": "workflow-quality",
       "kind": "skills",
       "description": "Evaluation, TDD, verification, compaction, learning, and cross-harness memory skills, including the legacy continuous-learning v1 path. The unified-memory workflow requires the separately installed ecc-universal CLI runtime.",
@@ -377,6 +409,7 @@
         "skills/skill-host-compat",
         "skills/skill-scout",
         "skills/skill-stocktake",
+        "skills/story-lifecycle",
         "skills/strategic-compact",
         "skills/tdd-workflow",
         "skills/verification-loop",
@@ -726,7 +759,7 @@
     {
       "id": "ito-compute",
       "kind": "skills",
-      "description": "Authenticated Itô GPU inventory, RFQ, status, device revocation, and explicitly gated node-qualification workflows through the separately installed canonical CLI.",
+      "description": "Authenticated It\u00f4 GPU inventory, RFQ, status, device revocation, and explicitly gated node-qualification workflows through the separately installed canonical CLI.",
       "paths": [
         "skills/ito-compute",
         "skills/ito-inference",
@@ -1324,6 +1357,99 @@
       "dependencies": [],
       "defaultInstall": false,
       "cost": "heavy",
+      "stability": "stable"
+    },
+    {
+      "id": "documentation-change-impact",
+      "kind": "skills",
+      "description": "Optional read-only change-impact analysis workflow.",
+      "paths": [
+        "skills/change-impact"
+      ],
+      "targets": [
+        "claude",
+        "claude-project",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode",
+        "codebuddy",
+        "joycode",
+        "qwen",
+        "zed",
+        "hermes",
+        "openclaw",
+        "kimi",
+        "adal"
+      ],
+      "dependencies": [
+        "workflow-quality"
+      ],
+      "defaultInstall": false,
+      "cost": "light",
+      "stability": "beta"
+    },
+    {
+      "id": "documentation-test-regression",
+      "kind": "skills",
+      "description": "Optional test-collaboration and module-regression workflow.",
+      "paths": [
+        "skills/test-collaboration",
+        "skills/module-regression"
+      ],
+      "targets": [
+        "claude",
+        "claude-project",
+        "cursor",
+        "antigravity",
+        "codex",
+        "opencode",
+        "codebuddy",
+        "joycode",
+        "qwen",
+        "zed",
+        "hermes",
+        "openclaw",
+        "kimi",
+        "adal"
+      ],
+      "dependencies": [
+        "workflow-quality"
+      ],
+      "defaultInstall": false,
+      "cost": "light",
+      "stability": "beta"
+    },
+    {
+      "id": "shared-script-utils",
+      "kind": "platform",
+      "description": "Shared utility files required by installed commands and platform tools.",
+      "paths": [
+        "scripts/lib/utils.js",
+        "scripts/lib/agent-data-home.js",
+        "scripts/lib/path-safety.js"
+      ],
+      "targets": [
+        "claude",
+        "claude-project",
+        "cursor",
+        "copilot",
+        "antigravity",
+        "opencode",
+        "codebuddy",
+        "joycode",
+        "qwen",
+        "zed",
+        "hermes",
+        "openclaw",
+        "kimi",
+        "adal",
+        "codex",
+        "gemini"
+      ],
+      "dependencies": [],
+      "defaultInstall": false,
+      "cost": "light",
       "stability": "stable"
     }
   ]

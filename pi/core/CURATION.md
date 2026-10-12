@@ -1,6 +1,6 @@
 # Curation
 
-pi/core includes 128 of 306 skills and 24 of 97 commands from the root of ECC.
+pi/core includes 132 of 311 skills and 24 of 97 commands from the root of ECC.
 Everything excluded is listed here with its reason.
 
 ## Rules
@@ -197,6 +197,7 @@ Exclude anything that:
 | `agent-runtime-gateway-smoke-test` | requires authenticated network gateways and remote sandbox callbacks at runtime |
 | `brownfield-retrospective` | depends on the ECC specialist agent roster and spec-miner dispatch workflow; not a compact portable Pi prompt |
 | `deepseek-harness-setup` | configures an external DeepSeek provider and Claude-Code-specific credentials and hook integration |
+| `story-lifecycle` | Requires ECC agent workflow handoffs and a local Node ledger; native Pi delivery has not been validated. |
 
 ## Excluded commands
 

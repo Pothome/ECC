@@ -103,8 +103,13 @@ Per trial (`results.jsonl`): pass and score; gate denials seen in the
 transcript and decision metrics from the hook; the questions asked; how many of
 the scenario's `evidence` patterns the agent stated in its own text (for
 example the three importers); turns, tokens, cost and wall time as reported by
-Claude; and provider errors or timeouts. The full transcript of each trial is
-kept in `transcripts/`.
+Claude; and provider errors or timeouts. The full transcript of each attempt is
+kept in `transcripts/`. An authentication-related provider error stops the run
+before the attempt is appended to `results.jsonl`; its transcript is retained,
+but there is no attempt record. Other provider-error or timeout attempts
+stay in `results.jsonl` but are not trials: summaries count valid trials only,
+report the failed attempts apart, and a resumed run retries their keys. A gated
+trial whose hook never ran also has no `results.jsonl` record; the run stops instead.
 
 ## Analysis
 
@@ -253,9 +258,15 @@ arms — every trial passing or every trial failing. Trap strength (how often th
 ungated arm passes) is reported separately and does not decide usability, since
 the ungated arm failing is what a working trap looks like.
 
-Graders are checked before any session is billed: the start workspace and the
-`naive` overlay must both score below 1 and `reference` must score 1, or the run
-stops.
+Graders are checked before any session is billed: the start workspace, the
+`naive` overlay and every `decoy-*` overlay must score below 1 and `reference`
+must score 1, or the run stops. A decoy has the right shape and the wrong
+content. `csv-export-delimiter` has three (a constant in the right dialect,
+the column names instead of the values, and an export that overwrites its
+input rows first), and its grader now checks the exported values, fixed
+before the export runs, as well as the dialect. Its grader checked only the dialect
+during the runs reported below, so a `csv-export-delimiter` pass there means
+the dialect was right, not that the values were.
 
 ### Hidden-intent results
 
@@ -528,6 +539,14 @@ The question is kept, because it asks something the gate genuinely never asked
 and the corpus suggests that kind of answer matters. What is not claimed is
 that adding it improved anything measurable here. A fair test needs scenarios
 written by independent authors who have not seen that question or these results.
+
+Because nothing here shows it helps, the question is now opt-in: it is asked
+only with `GATEGUARD_EXTERNAL_CONTRACT_QUESTION` on (see
+[change-profile.md](change-profile.md#external-contract-question)). The
+harness clears every `GATEGUARD_*` variable from the agent's environment, so a
+`gate` arm built from a candidate tree that includes this change measures the
+gate without it, the "before the question" condition above. The runs reported
+here used candidate trees from before the change, where it was always asked.
 
 **Standing conclusion.** Across 336 billed trials the gate's benefit is not
 established, its direction has been positive in the unflagged runs, and its cost

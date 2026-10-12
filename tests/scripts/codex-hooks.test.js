@@ -187,6 +187,7 @@ function runHermeticPreCommit({ content = 'safe text\n', filename = 'sample.txt'
       const staged = spawnSync('git', ['add', '--', filename], { cwd: tempDir, env: hookEnv });
       assert.strictEqual(staged.status, 0, staged.stderr?.toString());
     }
+    // Synthetic scanners drain staged input before returning so pipefail sees their intended status.
     // Keep real Git/awk available, while hiding every installed ripgrep binary.
     fs.writeFileSync(bashEnv, `
 git_path="$(command -v git)"
@@ -206,7 +207,7 @@ unset -f rg
 ${scanner === 'real' ? '# Preserve dependencies used by an actual scanner executable or wrapper.' : `PATH="${toBashPath(binDir)}"`}
 ${scanner ? `rg() {
 printf '%s\\n' "$*" >> "${toBashPath(callsPath)}"
-${scanner === 'real' ? '"$rg_path" "$@"' : scanner === 'finding' ? "printf '1:synthetic-scanner-finding\\n'; return 0;" : scanner === 'error' ? 'return 2;' : 'return 1;'}
+${scanner === 'real' ? '' : 'cat >/dev/null; '}${scanner === 'real' ? '"$rg_path" "$@"' : scanner === 'finding' ? "printf '1:synthetic-scanner-finding\\n'; return 0;" : scanner === 'error' ? 'return 2;' : 'return 1;'}
 }` : ''}
 `);
     const result = runBash(preCommitHook, {
@@ -881,7 +882,7 @@ if (
       assert.strictEqual(parsed.sandbox_mode, 'workspace-write');
       assert.strictEqual(parsed.web_search, 'live');
       assert.strictEqual(parsed.features.multi_agent, true);
-      assert.strictEqual(parsed.profiles, undefined);
+      assert.strictEqual(parsed.profiles, undefined, 'Do not emit legacy profile tables');
       assert.strictEqual(parsed.agents.max_threads, 6);
       assert.strictEqual(parsed.agents.explorer.config_file, 'agents/explorer.toml');
     } finally {
@@ -1263,6 +1264,11 @@ if (
       assert.ok(parsedConfig.features);
       assert.strictEqual(parsedConfig.features.multi_agent, true);
       assert.strictEqual(parsedConfig.profiles, undefined);
+      for (const name of ['strict', 'yolo']) {
+        assert.ok(fs.existsSync(path.join(codexDir, `${name}.config.toml`)));
+      }
+      assert.strictEqual(TOML.parse(fs.readFileSync(path.join(codexDir, 'strict.config.toml'), 'utf8')).approval_policy, 'on-request');
+      assert.strictEqual(TOML.parse(fs.readFileSync(path.join(codexDir, 'yolo.config.toml'), 'utf8')).approval_policy, 'never');
       assert.ok(parsedConfig.agents);
       assert.strictEqual(parsedConfig.agents.max_threads, 6);
       assert.strictEqual(parsedConfig.agents.max_depth, 1);

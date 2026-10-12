@@ -43,16 +43,16 @@ function applyArm(arm, targetClass) {
   const originalText = targetClass.questionText;
   const originalPhrase = targetClass.condensedQuestionPhrase;
   const originalHint = targetClass.condensedHintFor;
-  const questionIdsFor = (cls, isWrite, profile) => armQuestionIds(arm, originalIds(cls, isWrite, profile));
+  const questionIdsFor = (cls, isWrite, profile, options) => armQuestionIds(arm, originalIds(cls, isWrite, profile, options));
   const questionText = id => (Object.hasOwn(PLACEBO_TEXT, id) ? PLACEBO_TEXT[id] : originalText(id));
   const phraseFor = id => {
     if (Object.hasOwn(PLACEBO_PHRASES, id)) return PLACEBO_PHRASES[id];
     if (id === KEPT_ID) return VERBATIM_PHRASE;
     return originalPhrase(id) || originalText(id).replace(/ \(search the tree.*\)$/, '').replace(/^\w/, c => c.toLowerCase());
   };
-  const condensedHintFor = (cls, isWrite, profile) => {
-    const ids = questionIdsFor(cls, isWrite, profile);
-    if (ids.join('\n') === originalIds(cls, isWrite, profile).join('\n')) return originalHint(cls, isWrite, profile);
+  const condensedHintFor = (cls, isWrite, profile, options) => {
+    const ids = questionIdsFor(cls, isWrite, profile, options);
+    if (ids.join('\n') === originalIds(cls, isWrite, profile, options).join('\n')) return originalHint(cls, isWrite, profile, options);
     return `briefly state ${joinPhrases(ids.map(phraseFor).filter(Boolean))}, then retry.`;
   };
   Object.assign(targetClass, { questionIdsFor, questionText, condensedHintFor });

@@ -2003,12 +2003,12 @@ function uninstallInstalledStates(options = {}) {
       const { isScriptBoundary, retainScriptBoundary } = require('./install/opencode-script-boundary');
       // Remove owned script bodies first. Keep their CommonJS scope while any
       // retained or user-created JavaScript still relies on that boundary.
-      const orderedOperations = record.adapter.target === 'opencode'
-        ? [...operations.filter(operation => !isScriptBoundary(operation, record.targetRoot)),
-          ...operations.filter(operation => isScriptBoundary(operation, record.targetRoot))]
-        : operations;
+      const orderedOperations = [
+        ...operations.filter(operation => !isScriptBoundary(operation, record.targetRoot)),
+        ...operations.filter(operation => isScriptBoundary(operation, record.targetRoot)),
+      ];
       for (const operation of orderedOperations) {
-        if (record.adapter.target === 'opencode' && retainScriptBoundary(operation, record.targetRoot)) {
+        if (retainScriptBoundary(operation, record.targetRoot)) {
           retainedPaths.push(operation.destinationPath);
           continue;
         }

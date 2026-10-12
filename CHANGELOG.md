@@ -5,6 +5,7 @@
 ### Changed
 
 - GateGuard first-touch denials ask questions that fit the target: by class (instruction, test, prose, config, code) on its project-relative path, and for code by what the change touches. An edit that changes no public declaration asks for the in-module call sites instead of importers and public API, and the data-schema question is dropped when the change handles no data. Changes the hook cannot read with confidence keep the original four questions word for word.
+- GateGuard's external-contract question ("name what outside this repository decides the format, units, timezone or protocol semantics") is opt-in through `GATEGUARD_EXTERNAL_CONTRACT_QUESTION`. Hidden-intent trials did not show it helps, so by default a code change that handles data asks only the data-schema question, and an unreadable change gets the original four questions and condensed hint.
 - GateGuard credits investigation that already happened: a completed, non-error `Glob`, `Grep`, `LS`, or search-style Bash/PowerShell command in the current human turn that names the target and whose scope contains it passes the first touch with a note. `Read` never counts, nor do searches in the same batch, before a compaction, with error results, or whose filters exclude the target or limit the search to another directory. When a denial follows a search that nearly counted, it names that search and why it did not count.
 - GateGuard passes comment and whitespace-only edits of code, test and prose files with a note, without marking the file checked, so the next change that alters code is still gated.
 - GateGuard asks once for a batch of new files: after a new file is denied, later new files of the same class in the same real directory within the same human turn pass with a note.
@@ -23,6 +24,8 @@
 - GateGuard keys checked files by canonical path, resolving relative targets against the tool `cwd`, so `a.py`, `./a.py`, and the absolute path (or differently cased and separated Windows spellings) share one first touch. Keys from earlier state files are still honoured.
 - GateGuard gates a MultiEdit call as its `tool_input.file_path` when its entries do not name their own path, which is the tool's own shape; such calls were never gated before, including on sensitive files.
 - GateGuard gates NotebookEdit as a first-touch edit of its `notebook_path`; notebooks were never gated before.
+- GateGuard prior-search credit no longer counts a search that never saw the target. File-type filters (`rg -t`/`-T`/`--type`/`--type-not`, `fd -e`/`--extension`, the Grep tool's `type`), the Glob tool's pattern, shell glob operands, and git pathspecs now filter like include globs, so `rg -t py tokenizer src` or `Glob **/tokenizer.py` no longer credits `tokenizer.js`. A search confined to the target's own file name (`Glob **/tokenizer.js`, `find -name tokenizer.js`, Grep `glob: 'tokenizer.js'`) is a lookup and never credits it. PowerShell searches keep backslashes as path separators.
+- GateGuard no longer passes an edit as comment-only when its text contains U+2028, U+2029, or U+0085, which end a JavaScript or C# line comment.
 
 ## 2.2.3 - 2026-10-01
 

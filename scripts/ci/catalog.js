@@ -294,7 +294,7 @@ function parseAgentsDocExpectations(agentsContent) {
 
     expectations.push({
       category: pattern.category,
-      mode: pattern.mode === 'minimum' && match[2] ? 'minimum' : pattern.mode,
+      mode: pattern.mode === 'minimum' ? (match[2] ? 'minimum' : 'exact') : pattern.mode,
       expected: Number(match[1]),
       source: `${pattern.source} (${pattern.category})`
     });
@@ -373,7 +373,7 @@ function parseZhAgentsDocExpectations(agentsContent) {
 
     expectations.push({
       category: pattern.category,
-      mode: pattern.mode === 'minimum' && match[2] ? 'minimum' : pattern.mode,
+      mode: pattern.mode === 'minimum' ? (match[2] ? 'minimum' : 'exact') : pattern.mode,
       expected: Number(match[1]),
       source: `${pattern.source} (${pattern.category})`
     });

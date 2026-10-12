@@ -58,7 +58,7 @@ const {
 } = require('./stale-operations-reconciliation');
 const { buildInstallIndex, rewriteRelativeLinks } = require('./link-rewrite');
 const { transformInstallContent } = require('./content-transform');
-const { assertScriptBoundary } = require('./opencode-script-boundary');
+const { assertScriptBoundary, isScriptBoundary } = require('./opencode-script-boundary');
 
 function isMarkdownPath(filePath) {
   return /\.(md|mdx|markdown)$/i.test(String(filePath || ''));
@@ -297,7 +297,7 @@ function readPreviousInstallState(plan) {
 }
 
 function assertOpenCodeScriptBoundary(plan, writtenDestinations = new Set()) {
-  if (plan.adapter?.target !== 'opencode') return;
+  if (!plan.operations.some(operation => isScriptBoundary(operation, plan.targetRoot))) return;
   assertSafeInstallOperation(plan, { destinationPath: plan.installStatePath });
   assertScriptBoundary(plan, {
     readFile: destinationPath => readInstalledFileNoFollow(plan, { destinationPath }),
@@ -742,6 +742,8 @@ function previewInstallPlan(plan) {
 
 function applyInstallPlan(plan, dependencies = {}) {
   assertHookConsentReady(plan);
+  // Reject conflicts before locks can create any target directories/files.
+  assertOpenCodeScriptBoundary(plan);
   if (plan.adapter?.target === 'opencode') {
     assertSafeInstallOperation(plan, { destinationPath: plan.installStatePath });
     return withOpenCodeInstallLocks(

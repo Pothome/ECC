@@ -31,6 +31,7 @@ skills:
   - bun-runtime
   - canary-watch
   - carrier-relationship-management
+  - change-impact
   - ck
   - claude-devfleet
   - click-path-audit
@@ -41,6 +42,7 @@ skills:
   - compose-multiplatform-patterns
   - configure-ecc
   - contract-first
+  - context-and-decisions
   - content-engine
   - content-hash-cache-pattern
   - context-budget
@@ -105,6 +107,7 @@ skills:
   - market-research
   - mcp-dependency-review
   - mcp-server-patterns
+  - module-regression
   - mybatis-patterns
   - motion-advanced
   - motion-foundations
@@ -165,6 +168,7 @@ skills:
   - tasteforge-video
   - tdd-workflow
   - team-builder
+  - test-collaboration
   - token-budget-advisor
   - token-card
   - unified-memory

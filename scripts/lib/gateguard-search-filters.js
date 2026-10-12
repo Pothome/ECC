@@ -3,11 +3,13 @@
 // --- Search flags ---
 
 const POWERSHELL_SEARCHES = new Set(['get-childitem', 'gci', 'select-string', 'sls']);
+// Non-enumerable metadata preserves the existing string-array evidence shape.
+const RG_TYPE_FILTER_COUNT = Symbol('rg-type-filter-count');
 
 const VALUE_FLAGS = new Set([
   '-e', '-f', '-g', '-t', '-T', '-m', '-A', '-B', '-C',
-  '--regexp', '--file', '--type', '--glob', '--iglob', '--include', '--exclude', '--exclude-dir', '--exclude-from',
-  '--ignore-file', '--max-count', '--replace',
+  '--regexp', '--file', '--type', '--type-not', '--type-add', '--type-clear', '--glob', '--iglob', '--include',
+  '--exclude', '--exclude-dir', '--exclude-from', '--ignore-file', '--max-count', '--replace',
   '-name', '-iname', '-path', '-ipath', '-type', '-maxdepth', '-mindepth', '-newer', '-regex', '-size', '-user', '-group', '-perm'
 ]);
 
@@ -15,7 +17,65 @@ const LS_VALUE_FLAGS = new Set(['-I', '--ignore', '--hide']);
 
 const TREE_VALUE_FLAGS = new Set(['-L', '-P', '-I', '-o']);
 
-const FD_VALUE_FLAGS = new Set([...VALUE_FLAGS, '-E']);
+const FD_VALUE_FLAGS = new Set([...VALUE_FLAGS, '-E', '--extension']);
+
+// see docs/gateguard/design-notes.md#type-filters
+// ripgrep 14.1 built-in types (`rg --type-list`) for common languages; any other name is unreadable.
+const RG_TYPE_GLOBS = Object.freeze({
+  c: ['*.[chH]', '*.[chH].in', '*.cats'],
+  cmake: ['*.cmake', 'CMakeLists.txt'],
+  config: ['*.cfg', '*.conf', '*.config', '*.ini'],
+  cpp: ['*.[ChH]', '*.[ChH].in', '*.[ch]pp', '*.[ch]pp.in', '*.[ch]xx', '*.[ch]xx.in', '*.cc', '*.cc.in', '*.hh', '*.hh.in', '*.inl'],
+  cs: ['*.cs'],
+  csharp: ['*.cs'],
+  css: ['*.css', '*.scss'],
+  csv: ['*.csv'],
+  dart: ['*.dart'],
+  docker: ['*Dockerfile*'],
+  elixir: ['*.eex', '*.ex', '*.exs', '*.heex', '*.leex', '*.livemd'],
+  erlang: ['*.erl', '*.hrl'],
+  go: ['*.go'],
+  graphql: ['*.graphql', '*.graphqls'],
+  h: ['*.h', '*.hh', '*.hpp'],
+  html: ['*.ejs', '*.htm', '*.html'],
+  java: ['*.java', '*.jsp', '*.jspx', '*.properties'],
+  js: ['*.cjs', '*.js', '*.jsx', '*.mjs', '*.vue'],
+  json: ['*.json', '*.sarif', 'composer.lock'],
+  jsonl: ['*.jsonl'],
+  kotlin: ['*.kt', '*.kts'],
+  lua: ['*.lua'],
+  make: ['*.mak', '*.mk', '[Gg][Nn][Uu]makefile', '[Gg][Nn][Uu]makefile.am', '[Gg][Nn][Uu]makefile.in', '[Mm]akefile', '[Mm]akefile.am', '[Mm]akefile.in'],
+  markdown: ['*.markdown', '*.md', '*.mdown', '*.mdwn', '*.mdx', '*.mkd', '*.mkdn'],
+  md: ['*.markdown', '*.md', '*.mdown', '*.mdwn', '*.mdx', '*.mkd', '*.mkdn'],
+  php: ['*.php', '*.php3', '*.php4', '*.php5', '*.php7', '*.php8', '*.pht', '*.phtml'],
+  protobuf: ['*.proto'],
+  ps: ['*.cdxml', '*.ps1', '*.ps1xml', '*.psd1', '*.psm1'],
+  py: ['*.py', '*.pyi'],
+  python: ['*.py', '*.pyi'],
+  ruby: ['*.gemspec', '*.rb', '*.rbw', '.irbrc', 'Gemfile', 'Rakefile', 'config.ru'],
+  rust: ['*.rs'],
+  scala: ['*.sbt', '*.scala'],
+  sh: [
+    '*.bash', '*.bashrc', '*.csh', '*.cshrc', '*.ksh', '*.kshrc', '*.sh', '*.tcsh', '*.zsh', '.bash_login', '.bash_logout',
+    '.bash_profile', '.bashrc', '.cshrc', '.kshrc', '.login', '.logout', '.profile', '.tcshrc', '.zlogin', '.zlogout',
+    '.zprofile', '.zshenv', '.zshrc', 'bash_login', 'bash_logout', 'bash_profile', 'bashrc', 'profile', 'zlogin', 'zlogout',
+    'zprofile', 'zshenv', 'zshrc'
+  ],
+  sql: ['*.psql', '*.sql'],
+  svelte: ['*.svelte'],
+  swift: ['*.swift'],
+  toml: ['*.toml', 'Cargo.lock'],
+  ts: ['*.cts', '*.mts', '*.ts', '*.tsx'],
+  txt: ['*.txt'],
+  typescript: ['*.cts', '*.mts', '*.ts', '*.tsx'],
+  vue: ['*.vue'],
+  xml: ['*.dtd', '*.rng', '*.sch', '*.xhtml', '*.xjb', '*.xml', '*.xml.dist', '*.xsd', '*.xsl', '*.xslt'],
+  yaml: ['*.yaml', '*.yml']
+});
+
+function rgTypeGlobs(name) {
+  return Object.prototype.hasOwnProperty.call(RG_TYPE_GLOBS, name) ? RG_TYPE_GLOBS[name] : null;
+}
 
 const POWERSHELL_FILTER_PARAMS = new Set(['filter', 'include', 'exclude']);
 
@@ -145,15 +205,15 @@ function bracketClass(glob, open) {
   return { token: { type: 'class', negated, ranges }, end: i };
 }
 
-function classMatches(token, ch) {
+function classMatches(token, ch, caseSensitive) {
   if (ch === '/') return false;
-  const forms = [ch, ch.toLowerCase(), ch.toUpperCase()];
+  const forms = caseSensitive ? [ch] : [ch, ch.toLowerCase(), ch.toUpperCase()];
   const member = token.ranges.some(([lo, hi]) => forms.some(form => form >= lo && form <= hi));
   return member !== token.negated;
 }
 
 // see docs/gateguard/design-notes.md#glob-matching-without-regexp
-function wildcardMatch(glob, text) {
+function wildcardMatch(glob, text, caseSensitive) {
   const tokens = globTokens(glob);
   if (!tokens) return null;
   const n = text.length;
@@ -166,7 +226,7 @@ function wildcardMatch(glob, text) {
     for (let j = n; j >= 0; j--) {
       if (token.type === 'lit') row[j] = j < n && text[j] === token.ch && next[j + 1];
       else if (token.type === 'one') row[j] = j < n && text[j] !== '/' && next[j + 1];
-      else if (token.type === 'class') row[j] = j < n && classMatches(token, text[j]) && next[j + 1];
+      else if (token.type === 'class') row[j] = j < n && classMatches(token, text[j], caseSensitive) && next[j + 1];
       else if (token.type === 'star') row[j] = next[j] || (j < n && text[j] !== '/' && row[j + 1]);
       else if (token.type === 'deep') row[j] = next[j] || (j < n && row[j + 1]);
       else {
@@ -183,12 +243,12 @@ function normalizeFilterGlob(glob) {
   return String(glob).toLowerCase().replace(/\\/g, '/').replace(/^(?:\.\/)+/, '').replace(/^\/+/, '').replace(/\/+$/, '');
 }
 
-function globMatches(glob, text, malformed) {
+function globMatches(glob, text, malformed, caseSensitive = false) {
   if (glob.length > MAX_FILTER_GLOB_CHARS) return null;
   const alternatives = expandBraces(glob);
   if (!alternatives) return null;
   return alternatives.some(alternative => {
-    const matched = wildcardMatch(alternative, text);
+    const matched = wildcardMatch(alternative, text, caseSensitive);
     return matched === null ? malformed : matched;
   });
 }
@@ -215,8 +275,21 @@ function filtersAdmitTarget(item, ctx, stem) {
   const exclusions = Array.isArray(item.exclusions) ? item.exclusions : [];
   if (exclusions.length === 0) return true;
   if (exclusions.length > MAX_FILTERS_PER_SEARCH) return false;
+  const typeStart = exclusions.length - (exclusions[RG_TYPE_FILTER_COUNT] || 0);
   const segments = targetSegments(ctx);
-  return !exclusions.some(exclusion => exclusionCoversTarget(exclusion, segments, stem));
+  return !exclusions.some((exclusion, index) => index >= typeStart
+    ? typeGlobMatchesTarget(exclusion, ctx, true) !== false
+    : exclusionCoversTarget(exclusion, segments, stem));
+}
+
+function typeGlobMatchesTarget(glob, ctx, exclusion = false) {
+  const name = ctx.targetKey.split('/').pop() || '';
+  // Windows evidence keys have lost filename case. Refuse inclusion credit and
+  // conservatively check possible type exclusions, still only on the filename.
+  if (/^[a-z]:\/|^\/\//i.test(ctx.targetKey)) {
+    return exclusion ? globMatches(normalizeFilterGlob(glob), name.toLowerCase(), true) : null;
+  }
+  return globMatches(glob, name, false, true);
 }
 
 function scopeRelativeSegments(item, ctx) {
@@ -246,9 +319,12 @@ function includeAdmitsTarget(include, item, ctx) {
 
 // see docs/gateguard/design-notes.md#include-filters
 function includesAdmitTarget(item, ctx) {
+  if (item.pathPattern && !pathPatternAdmitsTarget(item.pathPattern, ctx)) return false;
+  if (!operandPatternsAdmitTarget(item, ctx)) return false;
   const includes = Array.isArray(item.includes) ? item.includes : [];
   if (includes.length === 0) return true;
   if (includes.length > MAX_FILTERS_PER_SEARCH) return false;
+  if (includes[RG_TYPE_FILTER_COUNT]) return includes.some(glob => typeGlobMatchesTarget(glob, ctx) === true);
   return includes.some(include => includeAdmitsTarget(include, item, ctx));
 }
 
@@ -256,9 +332,71 @@ function isBasenameGlob(glob) {
   return !/[\\/]/.test(String(glob).replace(/^(?:\*\*[\\/])+/, ''));
 }
 
-function grepToolFilters(glob) {
+// --- Path patterns ---
+// see docs/gateguard/design-notes.md#path-patterns
+
+const PATH_GLOB_CHARS = /[*?[{]/;
+
+/**
+ * The pattern a path argument applies, split at its literal directory prefix,
+ * or null when it has no glob characters. `root` is the prefix as path parts.
+ */
+function pathPatternFor(root, pattern, { crossSegments = false, ancestors = false } = {}) {
+  const segments = String(pattern).split(/[\\/]/);
+  const firstGlob = segments.findIndex(segment => PATH_GLOB_CHARS.test(segment));
+  if (firstGlob === -1) return null;
+  const literal = segments.slice(0, firstGlob).join('/') || (firstGlob > 0 ? '/' : '');
+  return { root: literal ? root.concat(literal) : root, glob: segments.slice(firstGlob).join('/'), crossSegments, ancestors };
+}
+
+function pathPatternAdmitsTarget(pattern, ctx) {
+  const root = ctx.resolveDir(...pattern.root).replace(/\/+$/, '');
+  if (!isInsideDir(ctx.targetKey, root)) return false;
+  const rel = ctx.targetKey.slice(root.length + 1).toLowerCase();
+  let glob = normalizeFilterGlob(pattern.glob);
+  if (pattern.crossSegments) glob = glob.replace(/\*+/g, '**');
+  const candidates = [rel];
+  if (pattern.ancestors) {
+    for (let at = rel.lastIndexOf('/'); at > 0; at = rel.lastIndexOf('/', at - 1)) candidates.push(rel.slice(0, at));
+  }
+  return candidates.some(text => globMatches(glob, text, false) === true);
+}
+
+// One alternative per path operand: a literal operand admits what its scope covers, a pattern what it matches.
+function operandPatternsAdmitTarget(item, ctx) {
+  const patterns = Array.isArray(item.scopePatterns) ? item.scopePatterns : [];
+  if (!patterns.some(Boolean) || !Array.isArray(item.scopes)) return true;
+  return item.scopes.some((parts, index) => {
+    if (patterns[index]) return pathPatternAdmitsTarget(patterns[index], ctx);
+    const scope = ctx.resolveDir(...parts);
+    return scope === ctx.targetKey || isInsideDir(ctx.targetKey, scope);
+  });
+}
+
+function literalBasename(glob) {
+  const last = normalizeFilterGlob(glob).split('/').pop();
+  return last && !PATH_GLOB_CHARS.test(last) ? last : null;
+}
+
+// see docs/gateguard/design-notes.md#search-scope
+/** Whether every include or path pattern that limits the search names only the target's own file name. */
+function confinedToTargetName(item, ctx) {
+  const name = (ctx.targetKey.split('/').pop() || '').toLowerCase();
+  const namesOnly = globs => globs.length > 0 && globs.every(glob => literalBasename(glob) === name);
+  if (namesOnly(Array.isArray(item.includes) ? item.includes : [])) return true;
+  if (item.pathPattern && namesOnly([item.pathPattern.glob])) return true;
+  const patterns = Array.isArray(item.scopePatterns) ? item.scopePatterns : [];
+  return patterns.length > 0 && patterns.every(Boolean) && namesOnly(patterns.map(pattern => pattern.glob));
+}
+
+function grepToolFilters(glob, type) {
   const filters = { positives: [], includes: [], exclusions: [], opaque: false };
-  if (typeof glob !== 'string' || !glob) return filters;
+  if (typeof type === 'string' && type) {
+    const globs = rgTypeGlobs(type);
+    if (globs) filters.typeIncludes = globs;
+    else filters.opaque = true;
+  }
+  if (typeof glob !== 'string' || !glob) return resolveTypeFilters(filters);
   for (const part of splitTopLevelCommas(glob)) {
     if (part.startsWith('!')) filters.exclusions.push(part.slice(1));
     else {
@@ -266,7 +404,23 @@ function grepToolFilters(glob) {
       filters.includes.push(part);
     }
   }
-  return filters;
+  return resolveTypeFilters(filters);
+}
+
+function resolveTypeFilters({ typeIncludes = [], typeExclusions = [], ...filters }) {
+  // rg's explicit positive globs override type selection, not union with it.
+  // Keep type alternatives separate until every explicit glob is known.
+  const hasIncludes = filters.includes.length > 0;
+  return {
+    ...filters,
+    includes: hasIncludes ? filters.includes : markTypeFilters(typeIncludes, typeIncludes.length),
+    exclusions: markTypeFilters(filters.exclusions.concat(hasIncludes ? [] : typeExclusions), hasIncludes ? 0 : typeExclusions.length)
+  };
+}
+
+function markTypeFilters(globs, count) {
+  if (!count) return globs;
+  return Object.freeze(Object.defineProperty(globs.slice(), RG_TYPE_FILTER_COUNT, { value: count }));
 }
 
 function shellSearchFilters(kind, args) {
@@ -279,7 +433,7 @@ function shellSearchFilters(kind, args) {
     const consumed = applyShellFilterArg(kind, args, i, filters);
     i += consumed;
   }
-  return filters;
+  return resolveTypeFilters(filters);
 }
 
 function applyShellFilterArg(kind, args, i, filters) {
@@ -293,6 +447,15 @@ function applyShellFilterArg(kind, args, i, filters) {
   const include = value => {
     if (value) filters.includes.push(value);
   };
+  const type = (name, indexes, excluded) => {
+    const globs = rgTypeGlobs(name);
+    if (!globs) filters.opaque = true;
+    else if (excluded) {
+      filters.typeExclusions = (filters.typeExclusions || []).concat(globs);
+      indexes.forEach(index => filters.dropped.add(index));
+    } else filters.typeIncludes = (filters.typeIncludes || []).concat(globs);
+  };
+  const extension = value => include(value ? `*.${String(value).replace(/^\./, '')}` : '');
   if (kind.startsWith('git ') && GIT_EXCLUDE_PATHSPEC.test(arg)) {
     exclude(arg.replace(GIT_EXCLUDE_PATHSPEC, ''), [i]);
     return 0;
@@ -303,25 +466,7 @@ function applyShellFilterArg(kind, args, i, filters) {
     const hasNext = eq <= 0 && i + 1 < args.length;
     const value = eq > 0 ? arg.slice(eq + 1) : hasNext ? args[i + 1] : '';
     const indexes = eq > 0 || !hasNext ? [i] : [i, i + 1];
-    const consumed = indexes.length - 1;
-    if (OPAQUE_FILTER_FLAGS.has(name)) {
-      filters.opaque = true;
-      return consumed;
-    }
-    if (name === '--glob' || name === '--iglob') {
-      if (value.startsWith('!')) exclude(value.slice(1), indexes);
-      else include(value);
-      return consumed;
-    }
-    if (name === '--include') {
-      include(value);
-      return consumed;
-    }
-    if (EXCLUDE_LONG_FLAGS.has(name) && (kind === 'ls' || !LS_ONLY_EXCLUDE_FLAGS.has(name))) {
-      exclude(value, indexes);
-      return consumed;
-    }
-    return 0;
+    return applyLongFilter(kind, name, value, indexes, { filters, exclude, include, type, extension }) ? indexes.length - 1 : 0;
   }
   if (!/^-[A-Za-z]/.test(arg)) return 0;
   const letters = shortFilterLetters(kind);
@@ -336,23 +481,48 @@ function applyShellFilterArg(kind, args, i, filters) {
     const value = attached || args[i + 1] || '';
     const indexes = attached || i + 1 >= args.length ? [i] : [i, i + 1];
     const consumed = indexes.length - 1;
-    applyShortFilter(kind, letter, value, indexes, { filters, exclude, include });
+    applyShortFilter(kind, letter, value, indexes, { filters, exclude, include, type, extension });
     return consumed;
   }
   return 0;
 }
 
+/** Apply one long filter flag; false when the flag is not a filter. */
+function applyLongFilter(kind, name, value, indexes, { filters, exclude, include, type, extension }) {
+  if (OPAQUE_FILTER_FLAGS.has(name) || (kind === 'rg' && (name === '--type-add' || name === '--type-clear'))) {
+    filters.opaque = true;
+  } else if (kind === 'rg' && (name === '--type' || name === '--type-not')) {
+    type(value, indexes, name === '--type-not');
+  } else if (kind === 'fd' && name === '--extension') {
+    extension(value);
+  } else if (name === '--glob' || name === '--iglob') {
+    if (value.startsWith('!')) exclude(value.slice(1), indexes);
+    else include(value);
+  } else if (name === '--include') {
+    include(value);
+  } else if (EXCLUDE_LONG_FLAGS.has(name) && (kind === 'ls' || !LS_ONLY_EXCLUDE_FLAGS.has(name))) {
+    exclude(value, indexes);
+  } else {
+    return false;
+  }
+  return true;
+}
+
 function shortFilterLetters(kind) {
-  if (kind === 'rg') return new Set(['g']);
-  if (kind === 'fd') return new Set(['E']);
+  if (kind === 'rg') return new Set(['g', 't', 'T']);
+  if (kind === 'fd') return new Set(['E', 'e']);
   if (kind === 'ls') return new Set(['I']);
   if (kind === 'tree') return new Set(['I', 'P']);
   if (kind === 'git ls-files') return new Set(['x', 'X']);
   return new Set();
 }
 
-function applyShortFilter(kind, letter, value, indexes, { filters, exclude, include }) {
-  if (kind === 'rg') {
+function applyShortFilter(kind, letter, value, indexes, { filters, exclude, include, type, extension }) {
+  if (kind === 'rg' && (letter === 't' || letter === 'T')) {
+    type(value, indexes, letter === 'T');
+  } else if (kind === 'fd' && letter === 'e') {
+    extension(value);
+  } else if (kind === 'rg') {
     if (value.startsWith('!')) exclude(value.slice(1), indexes);
     else include(value);
   } else if (kind === 'tree' && letter === 'P') {
@@ -455,5 +625,7 @@ module.exports = {
   grepToolFilters,
   shellSearchFilters,
   filtersAdmitTarget,
-  includesAdmitTarget
+  includesAdmitTarget,
+  pathPatternFor,
+  confinedToTargetName
 };

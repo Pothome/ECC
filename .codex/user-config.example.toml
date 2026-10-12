@@ -90,13 +90,12 @@ startup_timeout_sec = 30
 # Preserve ECC's explicit multi-agent setting.
 multi_agent = true
 
-# Named profiles live in sibling files, not in this file: Codex 0.134.0 and
-# later no longer read `[profiles.<name>]` tables from config.toml, and
-# `codex -p <name>` fails while such a table is present. Select a supported
-# profile explicitly with `codex -p <name>`, which reads
-# `<CODEX_HOME>/<name>.config.toml` (shipped beside this reference as
-# `strict.config.toml` and `yolo.config.toml`). Defining a profile file does
-# not select it; the approval and sandbox policy above remain the default.
+# Codex 0.134+ reads named profiles from <CODEX_HOME>/<name>.config.toml.
+# Install strict.config.toml and yolo.config.toml beside config.toml, then use
+# `codex -p strict` or `codex -p yolo`. Defining a file does not select it.
+# For an existing home, move legacy [profiles.<name>] settings into that file
+# and remove the legacy table and top-level profile selector after review.
+# Approval and sandbox policy remain separate; the default above is on-request.
 
 [agents]
 # Multi-agent role limits and local role definitions.

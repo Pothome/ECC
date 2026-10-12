@@ -165,7 +165,7 @@ const checks = [
     assert.strictEqual(project.agents.max_threads, 6);
     assert.strictEqual(project.agents.max_depth, 1);
   }],
-  ['user reference preserves root defaults and keeps profiles in sibling files', () => {
+  ['user reference uses separate named profile files', () => {
     const user = readUserReference();
     assert.deepStrictEqual(Object.keys(user).sort(), [
       'agents', 'approval_policy', 'features', 'mcp_servers', 'notify',
@@ -176,6 +176,15 @@ const checks = [
     assert.strictEqual(user.web_search, 'live');
     assert.deepStrictEqual(user.notify,
       ['terminal-notifier', '-title', 'Codex ECC', '-message', 'Task completed!', '-sound', 'default']);
+    assert.ok(!Object.hasOwn(user, 'profiles'));
+    for (const [name, expected] of Object.entries({
+      strict: { approval_policy: 'on-request', sandbox_mode: 'read-only', web_search: 'cached' },
+      yolo: { approval_policy: 'never', sandbox_mode: 'workspace-write', web_search: 'live' },
+    })) {
+      const profile = TOML.parse(fs.readFileSync(
+        path.join(repoRoot, '.codex', `${name}.config.toml`), 'utf8'));
+      assert.deepStrictEqual(profile, expected);
+    }
     assert.ok(!Object.hasOwn(user, 'profile'), 'Defining a profile must not select it');
     assert.ok(!Object.hasOwn(user, 'profiles'), 'Profiles must not live in config.toml on Codex 0.134.0+');
     for (const [name, expected] of [
@@ -238,8 +247,7 @@ const checks = [
         assert.deepStrictEqual(merged[key], custom[key]);
       }
       assert.strictEqual(merged.profiles.strict.sandbox_mode, 'workspace-write');
-      assert.deepStrictEqual(merged.profiles.strict.approval_policy, undefined);
-      assert.strictEqual(merged.profiles.yolo, undefined);
+      assert.deepStrictEqual(merged.profiles, custom.profiles, 'Legacy choices require explicit manual migration');
     });
   }],
   ['legacy merger rejects missing user reference without falling back to project config', () => {

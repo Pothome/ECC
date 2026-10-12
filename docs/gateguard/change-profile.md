@@ -116,6 +116,21 @@ or a PowerShell file or web cmdlet (`Out-File`, `Get-Content`,
 `*-Clixml`; `Import-Csv` matches `csv`). Redirection is found without
 reading quotes, so a `>` inside a string also counts.
 
+## External-contract question
+
+`GATEGUARD_EXTERNAL_CONTRACT_QUESTION` (`1`, `true`, `on`, `enabled`,
+`enable` or `yes`) adds `external-contract` right after every `data-schema`
+in the table above: "Name what outside this repository decides the format,
+units, timezone or protocol semantics here (the consumer, the producer, or a
+stated convention), or state that the choice is unconstrained". The condensed
+hint and the decision metrics name it too. It is off by default because it
+has no evidence behind it: it was designed after inspecting the
+hidden-intent corpus, and in the rerun that added it the gated arm did not
+improve (see
+[question-effectiveness.md](question-effectiveness.md#adding-an-external-contract-question-did-not-help)).
+`questionIdsFor(class, isWrite, profile, { externalContract: true })` returns
+the ids with it.
+
 ## Trivial edits
 
 An Edit is trivial when, for every entry, old and new have the same code once
@@ -139,6 +154,9 @@ Anything the lexer cannot read with confidence makes the entry non-trivial:
 - a line comment ending in `\` (it continues onto the next line in C and
   Make), the trigraph `??/`, a `/*` inside a block comment, and an
   unterminated block comment or string;
+- U+2028, U+2029 or U+0085 anywhere in the text: JavaScript ends a line at
+  the first two and C# at all three, so code after one inside a `//` comment
+  runs, while the lexer splits lines only at `\n` and `\r`;
 - a code line ending in a line continuation `\` (trailing blanks included):
   a C macro, a Python explicit continuation or a string continued onto the
   next line joins that line, so adding or removing a comment-only line after
@@ -293,7 +311,8 @@ questions were asked without storing text.
 | config | any | `config-reader`, `config-effect`, `no-plaintext-secrets`, `quote-instruction` |
 
 `[data-schema]` is asked only when `touchesData`. With an unknown profile the
-code text is byte-identical to the fixed four questions. Sensitive and
+code text is byte-identical to the fixed four questions, unless the opt-in
+[external-contract question](#external-contract-question) is on. Sensitive and
 hard-linked targets and NotebookEdit calls are never profiled, so they always
 get the full code questions. Instruction and
 config questions carry no change-dependent item, and the test and prose items
@@ -303,7 +322,8 @@ file (same canonical key); entries for other files do not count.
 
 A condensed code denial names the same ids as a full one, one short phrase per
 id (`condensedQuestionPhrase`), so the data and duplicate checks follow the
-profile there too. The one exception is an Edit with an unknown profile, which
-keeps the original hint byte for byte ("importers/callers, affected API, data
-schemas if any"); a Write with an unknown profile, sensitive Writes included,
+profile there too. An Edit with an unknown profile keeps the original hint
+byte for byte ("importers/callers, affected API, data schemas if any") when
+the external-contract question is off. Opting in adds its external-contract
+phrase to that hint. A Write with an unknown profile, sensitive Writes included,
 names `callers`, `no-duplicate` and `data-schema` like its full denial.

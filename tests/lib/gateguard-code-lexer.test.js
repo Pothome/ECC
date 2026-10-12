@@ -35,6 +35,16 @@ test('a comment-only change to C-family code is trivial', () => {
   assert.strictEqual(isTrivialEdit('a(); // x', 'a(); // y', JS), true);
 });
 
+test('a Unicode line terminator makes an edit non-trivial', () => {
+  // JavaScript ends a line comment at U+2028 and U+2029, and C# also at U+0085.
+  for (const sep of ['\u2028', '\u2029', '\u0085']) {
+    const code = sep.codePointAt(0).toString(16);
+    assert.strictEqual(isTrivialEdit(`// note${sep}foo(1);`, `// note${sep}foo(2);`, JS), false, `U+${code} ends the comment`);
+    assert.strictEqual(isTrivialEdit(`a(); // x${sep}y`, `a(); // z${sep}y`, JS), false, `U+${code} anywhere`);
+    assert.strictEqual(isTrivialEdit(`x = 1  # a${sep}b`, `x = 1  # c${sep}b`, PY), false, `U+${code} in any language`);
+  }
+});
+
 test('comment markers inside a string are code', () => {
   assert.strictEqual(isTrivialEdit('const s = "a // b";', 'const s = "a // c";', JS), false);
   assert.strictEqual(isTrivialEdit("const s = 'x /* y */ z';", "const s = 'x /* q */ z';", JS), false);

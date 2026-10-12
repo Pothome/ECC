@@ -54,12 +54,14 @@
       "bun-runtime",
       "click-path-audit",
       "clickhouse-io",
+      "change-impact",
       "code-tour",
       "codebase-onboarding",
       "coding-standards",
       "compose-multiplatform-patterns",
       "content-hash-cache-pattern",
       "contract-first",
+      "context-and-decisions",
       "conventional-commit-review",
       "cost-aware-llm-pipeline",
       "council",
@@ -112,6 +114,7 @@
       "living-docs-governance",
       "make-interfaces-feel-better",
       "mcp-server-patterns",
+      "module-regression",
       "ml-adoption-playbook",
       "mle-workflow",
       "motion-advanced",
@@ -157,6 +160,7 @@
       "swift-protocol-di-testing",
       "swiftui-patterns",
       "tdd-workflow",
+      "test-collaboration",
       "verification-loop",
       "vite-patterns",
       "vue-patterns"
@@ -342,7 +346,8 @@
       "token-card": "Requires a downloaded tokenchit CLI and reads provider session logs.",
       "agent-runtime-gateway-smoke-test": "requires authenticated network gateways and remote sandbox callbacks at runtime",
       "brownfield-retrospective": "depends on the ECC specialist agent roster and spec-miner dispatch workflow; not a compact portable Pi prompt",
-      "deepseek-harness-setup": "configures an external DeepSeek provider and Claude-Code-specific credentials and hook integration"
+      "deepseek-harness-setup": "configures an external DeepSeek provider and Claude-Code-specific credentials and hook integration",
+      "story-lifecycle": "Requires ECC agent workflow handoffs and a local Node ledger; native Pi delivery has not been validated."
     }
   },
   "commands": {

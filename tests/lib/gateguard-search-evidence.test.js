@@ -157,6 +157,98 @@ test('stripped test stems keep the generic, length, word-boundary and scope rule
   assert.strictEqual(miss && miss.reason, 'generic-stem');
 });
 
+const filterScan = searches => ({ turnId: null, searches, batchIds: new Map(), newestMessageId: null, shellCommands: [], reads: [] });
+const filterSearch = (name, input) => ({ name, input, callsAgo: 1, messageId: 'msg_1' });
+const label = ([name, input]) => `${name} ${JSON.stringify(input)}`;
+
+test('a type, extension or path pattern that misses the target stops its stem from crediting', () => {
+  const { findCreditingSearch, findClosestMiss } = loadHook();
+  const data = { cwd: root };
+  const target = `${root}/src/parser/tokenizer.js`;
+  const missing = [
+    ['Bash', { command: 'rg -t py tokenizer src' }],
+    ['Bash', { command: 'rg -T js tokenizer src' }],
+    ['Bash', { command: 'rg --type-not js tokenizer src' }],
+    ['Bash', { command: 'fd -e py tokenizer src' }],
+    ['Grep', { pattern: 'tokenizer', type: 'py' }],
+    ['Glob', { pattern: '**/tokenizer.py' }],
+    ['Bash', { command: 'rg tokenizer src/*.py' }],
+    ['Bash', { command: 'grep -rn tokenizer src/**/*.py' }],
+    ['Bash', { command: "git grep tokenizer -- '*.py'" }],
+    ['Bash', { command: "git ls-files '*tokenizer.py'" }]
+  ];
+  for (const search of missing) {
+    const scan = filterScan([filterSearch(...search)]);
+    assert.strictEqual(findCreditingSearch(scan, target, false, data), null, label(search));
+    assert.strictEqual((findClosestMiss(scan, target, false, data) || {}).reason, 'excluded', label(search));
+  }
+  const covering = [
+    ['Bash', { command: 'rg -t js tokenizer src' }],
+    ['Bash', { command: 'fd -e js tokenizer src' }],
+    ['Grep', { pattern: 'tokenizer', type: 'js' }],
+    ['Glob', { pattern: '**/tokenizer*' }],
+    ['Glob', { pattern: 'src/**/*tokenizer*' }],
+    ['Bash', { command: 'rg tokenizer src/*' }],
+    ['Bash', { command: 'rg tokenizer lib/*.py src' }],
+    ['Bash', { command: "git grep tokenizer -- '*.js'" }],
+    ['Bash', { command: "git grep tokenizer -- 'src/*.js'" }]
+  ];
+  for (const search of covering) {
+    assert.ok(findCreditingSearch(filterScan([filterSearch(...search)]), target, false, data), label(search));
+  }
+});
+
+test('a search confined to the target file name is a lookup, not a search', () => {
+  const { findCreditingSearch, findClosestMiss } = loadHook();
+  const data = { cwd: root };
+  const target = `${root}/src/parser/tokenizer.js`;
+  const lookups = [
+    ['Glob', { pattern: '**/tokenizer.js' }],
+    ['Glob', { pattern: 'src/**/tokenizer.js' }],
+    ['Grep', { pattern: 'tokenizer', glob: 'tokenizer.js' }],
+    ['Grep', { pattern: 'tokenizer', glob: '**/tokenizer.js' }],
+    ['Bash', { command: 'find src -name tokenizer.js' }],
+    ['Bash', { command: 'rg -g tokenizer.js tokenizer src' }],
+    ['Bash', { command: 'rg -t js -g tokenizer.js tokenizer src' }],
+    ['Grep', { pattern: 'tokenizer', type: 'js', glob: 'tokenizer.js' }],
+    ['Bash', { command: 'rg --files -g tokenizer.js src' }],
+    ['Bash', { command: 'rg tokenizer src/**/tokenizer.js' }]
+  ];
+  for (const search of lookups) {
+    const scan = filterScan([filterSearch(...search)]);
+    assert.strictEqual(findCreditingSearch(scan, target, false, data), null, label(search));
+    assert.strictEqual((findClosestMiss(scan, target, false, data) || {}).reason, 'lookup', label(search));
+  }
+  const searches = [
+    ['Glob', { pattern: '**/tokenizer.*' }],
+    ['Bash', { command: "find src -name 'tokenizer.*'" }],
+    ['Bash', { command: "rg -g tokenizer.js -g '*.ts' tokenizer src" }]
+  ];
+  for (const search of searches) {
+    assert.ok(findCreditingSearch(filterScan([filterSearch(...search)]), target, false, data), label(search));
+  }
+  const testTarget = `${root}/tests/parser/tokenizer.test.js`;
+  const lookupOfModule = filterScan([filterSearch('Glob', { pattern: '**/tokenizer.js' })]);
+  assert.strictEqual(findCreditingSearch(lookupOfModule, testTarget, false, data), null, 'a Glob of the module never listed its test');
+  assert.strictEqual((findClosestMiss(lookupOfModule, testTarget, false, data) || {}).reason, 'excluded');
+});
+
+test('PowerShell single-quoted backslash filters preserve inclusion and exclusion scope', () => {
+  const { findCreditingSearch, findClosestMiss } = loadHook();
+  const target = String.raw`C:\repo\src\lexer\handler.py`;
+  const data = { cwd: String.raw`C:\repo` };
+  for (const command of [String.raw`rg -g 'src\lexer\*.py' handler .`, String.raw`rg handler src\lexer`]) {
+    assert.ok(findCreditingSearch(filterScan([filterSearch('PowerShell', { command })]), target, false, data), command);
+  }
+  const command = String.raw`rg -g '!src\lexer\*.py' handler .`;
+  const scan = filterScan([filterSearch('PowerShell', { command })]);
+  assert.equal(findCreditingSearch(scan, target, false, data), null);
+  assert.equal(findClosestMiss(scan, target, false, data).reason, 'excluded');
+  const ambiguous = String.raw`rg -g 'src''\lexer\*.py' handler .`;
+  assert.equal(findCreditingSearch(filterScan([filterSearch('PowerShell', { command: ambiguous })]), target, false, data), null,
+    'unsupported PowerShell literal-apostrophe syntax must never credit a different path');
+});
+
 fs.rmSync(transcriptDir, { recursive: true, force: true });
 
 console.log(`\nResults: Passed: ${passed}, Failed: ${failed}`);
