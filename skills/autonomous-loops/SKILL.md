@@ -113,10 +113,10 @@ claude -p --allowedTools "Read,Write,Edit,Bash" "Implement the fixes from securi
 
 ```bash
 # Start the default session
-node scripts/claw.js
+node "${CLAUDE_PLUGIN_ROOT}/scripts/claw.js"
 
 # Named session with skill context
-CLAW_SESSION=my-project CLAW_SKILLS=tdd-workflow,security-review node scripts/claw.js
+CLAW_SESSION=my-project CLAW_SKILLS=tdd-workflow,security-review node "${CLAUDE_PLUGIN_ROOT}/scripts/claw.js"
 ```
 
 ### How It Works
