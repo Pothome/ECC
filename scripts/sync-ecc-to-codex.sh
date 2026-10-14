@@ -313,7 +313,7 @@ fi
 log "Syncing Codex named profile files"
 run_or_echo mkdir -p "$CODEX_HOME"
 for profile in strict yolo; do
-  if [[ -f "$CODEX_HOME/$profile.config.toml" ]]; then
+  if [[ -e "$CODEX_HOME/$profile.config.toml" || -L "$CODEX_HOME/$profile.config.toml" ]]; then
     log "Preserving existing $profile.config.toml (user customizations win over shipped defaults)"
     continue
   fi

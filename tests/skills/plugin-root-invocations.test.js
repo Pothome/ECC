@@ -50,7 +50,7 @@ test('sync seeds missing profile files but preserves user-edited profiles', () =
   const skill = fs.readFileSync(path.join(repoRoot, 'skills', 'tdd-workflow', 'SKILL.md'), 'utf8');
   assert.match(skill, /CLAUDE_PLUGIN_ROOT:-\$PWD/);
   const sync = fs.readFileSync(path.join(repoRoot, 'scripts', 'sync-ecc-to-codex.sh'), 'utf8');
-  assert.match(sync, /if \[\[ -f "\$CODEX_HOME\/\$profile\.config\.toml" \]\]/);
+  assert.match(sync, /if \[\[ -e "\$CODEX_HOME\/\$profile\.config\.toml" \|\| -L "\$CODEX_HOME\/\$profile\.config\.toml" \]\]/);
   assert.match(sync, /log "Preserving existing \$profile\.config\.toml/);
 });
 
