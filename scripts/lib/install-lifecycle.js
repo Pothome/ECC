@@ -38,6 +38,10 @@ const {
   validateManagedHooks,
 } = require('./install/claude-settings');
 const { transformInstallContent } = require('./install/content-transform');
+const {
+  isOpenCodeConfigTemplateOperation,
+  mergeOpenCodeConfigContent,
+} = require('./install/opencode-config-merge');
 const { buildInstallIndex, rewriteRelativeLinks } = require('./install/link-rewrite');
 const { getInstallTargetAdapter, listInstallTargetAdapters } = require('./install-targets/registry');
 const { resolveInvocationEnvironment } = require('./invocation-environment');
@@ -332,9 +336,25 @@ function executeRepairOperation(
 
     if (operation.contentTransform || isMarkdownPath(operation.destinationPath)) {
       const source = readFileWithMetadataNoFollow(sourcePath, 'utf8');
+      let expectedContent = getExpectedCopyFileContent(operation, source.content, linkIndex);
+      // #3559: the OpenCode config destination is the user's live
+      // opencode.json. Repair must merge the template into it rather than
+      // clobber user-owned keys the merge install preserved.
+      if (isOpenCodeConfigTemplateOperation(operation)) {
+        const existingDestination = getContainedExistingPath(operation.destinationPath, trustedRoot, 'repair');
+        if (existingDestination) {
+          const mergedContent = mergeOpenCodeConfigContent(
+            readFileNoFollow(existingDestination, 'utf8'),
+            expectedContent
+          );
+          if (mergedContent !== null) {
+            expectedContent = mergedContent;
+          }
+        }
+      }
       writeContainedFile(
         operation.destinationPath,
-        getExpectedCopyFileContent(operation, source.content, linkIndex),
+        expectedContent,
         trustedRoot,
         'repair',
         source.mode & 0o777,
@@ -419,6 +439,46 @@ function executeRepairOperation(
 function executeUninstallOperation(operation, trustedRoot, options = {}) {
   // Confine deletes to the trusted install root (GHSA-hfpv-w6mp-5g95).
   if (operation.kind === 'copy-file') {
+    // #3559: merged OpenCode configs record the user's pre-install content.
+    // Restore it instead of deleting the file, and only when ECC's recorded
+    // write is intact — drifted files keep the preserveDriftedCopies policy
+    // below so newer user edits are never overwritten.
+    const previousContent = getOperationPreviousContent(operation);
+    if (previousContent !== null) {
+      const existingDestination = getContainedExistingPath(
+        operation.destinationPath,
+        trustedRoot,
+        'uninstall',
+        { allowFinalSymlink: true }
+      );
+      if (!existingDestination) {
+        return {
+          removedPaths: [],
+          cleanupTargets: []
+        };
+      }
+      const recordedDigest = /^[a-f0-9]{64}$/i.test(operation.contentSha256 || '')
+        ? operation.contentSha256.toLowerCase()
+        : null;
+      if (recordedDigest) {
+        const currentDigest = crypto.createHash('sha256')
+          .update(readFileNoFollow(existingDestination))
+          .digest('hex');
+        if (currentDigest !== recordedDigest) {
+          return {
+            removedPaths: [],
+            cleanupTargets: [],
+            retainedPaths: [operation.destinationPath]
+          };
+        }
+      }
+      writeContainedFile(operation.destinationPath, previousContent, trustedRoot, 'uninstall');
+      return {
+        removedPaths: [],
+        cleanupTargets: []
+      };
+    }
+
     if (options.preserveDriftedCopies) {
       const existingDestination = getContainedExistingPath(
         operation.destinationPath,
