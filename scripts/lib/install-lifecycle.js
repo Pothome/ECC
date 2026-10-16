@@ -7,7 +7,7 @@ const { isDeepStrictEqual } = require('util');
 
 const { loadInstallManifests } = require('./install-manifests');
 const { readInstallState, validateInstallState } = require('./install-state');
-const { assertWithinTrustedRoot } = require('./path-safety');
+const { assertWithinTrustedRoot, isWithinRoot } = require('./path-safety');
 const { createInstallPlanFromRequest } = require('./install/runtime');
 const { assertNoNewUserOwnedFile, prepareUserOwnedFileGuard } = require('./install/ownership-guard');
 const { withOpenCodeInstallLocks } = require('./install/opencode-install-lock');
@@ -873,13 +873,18 @@ function inspectManagedOperation(repoRoot, trustedRoot, operation, linkIndex = n
   };
 }
 
-function summarizeManagedOperationHealth(repoRoot, trustedRoot, operations, target = null) {
+function trustedRootForDestination(destinationPath, targetRoot, trustedRoots = [targetRoot]) {
+  const parent = typeof destinationPath === 'string' ? path.dirname(destinationPath) : destinationPath;
+  return trustedRoots.find(root => isWithinRoot(parent, root)) || targetRoot;
+}
+
+function summarizeManagedOperationHealth(repoRoot, trustedRoot, operations, target = null, trustedRoots = [trustedRoot]) {
   const linkIndex = buildLinkIndexForOperations(operations, trustedRoot);
   return operations.reduce(
     (summary, operation) => {
       const inspection = inspectManagedOperation(
         repoRoot,
-        trustedRoot,
+        trustedRootForDestination(operation.destinationPath, trustedRoot, trustedRoots),
         operation,
         linkIndex,
         target
@@ -1212,11 +1217,14 @@ function analyzeRecord(record, context) {
   }
 
   const managedOperations = getManagedOperations(state);
+  const trustedRoots = getInstallTargetAdapter(record.adapter.id || record.adapter.target)
+    .resolveTrustedRoots(context);
   const operationHealth = summarizeManagedOperationHealth(
     context.repoRoot,
     record.targetRoot,
     managedOperations,
-    record.adapter.target
+    record.adapter.target,
+    trustedRoots
   );
   const missingManagedOperations = operationHealth.missing;
 
@@ -1604,6 +1612,8 @@ function repairInstalledStates(options = {}) {
 
       let releaseSettingsLock = null;
       try {
+        const trustedRoots = getInstallTargetAdapter(record.adapter.id || record.adapter.target)
+          .resolveTrustedRoots(context);
         preflightOpenCodeHookDeactivation(record, context);
         const settingsPathToLock = !options.dryRun
           && getManagedOperations(record.state || {}).some(
@@ -1687,7 +1697,8 @@ function repairInstalledStates(options = {}) {
             context.repoRoot,
             record.targetRoot,
             desiredPlan.operations,
-            record.adapter.target
+            record.adapter.target,
+            trustedRoots
           );
           const unsafeOperationResult = getUnsafeOperationResult(
             record,
@@ -1737,7 +1748,8 @@ function repairInstalledStates(options = {}) {
           context.repoRoot,
           record.targetRoot,
           desiredPlan.operations,
-          record.adapter.target
+          record.adapter.target,
+          trustedRoots
         );
 
         const unsafeOperationResult = getUnsafeOperationResult(
@@ -1823,7 +1835,7 @@ function repairInstalledStates(options = {}) {
           const repairedPath = executeRepairOperation(
             context.repoRoot,
             operation,
-            record.targetRoot,
+            trustedRootForDestination(operation.destinationPath, record.targetRoot, trustedRoots),
             repairLinkIndex,
             record.adapter.target,
             Boolean(releaseSettingsLock),
@@ -1939,11 +1951,14 @@ function repairInstalledStates(options = {}) {
 
 
 function uninstallInstalledStates(options = {}) {
-  const records = discoverInstalledStates({
-    homeDir: options.homeDir,
-    projectRoot: options.projectRoot,
-    targets: options.targets,
+  const context = {
+    homeDir: options.homeDir || process.env.HOME || os.homedir(),
+    projectRoot: options.projectRoot || process.cwd(),
     env: resolveInvocationEnvironment(options),
+  };
+  const records = discoverInstalledStates({
+    ...context,
+    targets: options.targets,
   }).filter(record => record.exists);
 
   const results = records.map(record => {
@@ -2000,6 +2015,11 @@ function uninstallInstalledStates(options = {}) {
         );
       }
 
+      const adapter = record.adapter && getInstallTargetAdapter(record.adapter.id || record.adapter.target);
+      const trustedRoots = adapter && typeof adapter.resolveTrustedRoots === 'function'
+        ? adapter.resolveTrustedRoots(context)
+        : [record.targetRoot];
+
       const { isScriptBoundary, retainScriptBoundary } = require('./install/opencode-script-boundary');
       // Remove owned script bodies first. Keep their CommonJS scope while any
       // retained or user-created JavaScript still relies on that boundary.
@@ -2012,7 +2032,7 @@ function uninstallInstalledStates(options = {}) {
           retainedPaths.push(operation.destinationPath);
           continue;
         }
-        const outcome = executeUninstallOperation(operation, record.targetRoot, {
+        const outcome = executeUninstallOperation(operation, trustedRootForDestination(operation.destinationPath, record.targetRoot, trustedRoots), {
           preserveDriftedCopies: true,
           target: record.adapter.target,
           settingsLockHeld: Boolean(releaseSettingsLock),
@@ -2036,7 +2056,8 @@ function uninstallInstalledStates(options = {}) {
       }
 
       for (const cleanupTarget of cleanupTargets) {
-        cleanupEmptyParentDirs(cleanupTarget, record.targetRoot);
+        const matchingRoot = trustedRootForDestination(cleanupTarget, record.targetRoot, trustedRoots);
+        cleanupEmptyParentDirs(cleanupTarget, matchingRoot);
       }
 
       return {
