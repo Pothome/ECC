@@ -310,6 +310,17 @@ else
   node "$BASELINE_MERGE_SCRIPT" "$CONFIG_FILE"
 fi
 
+log "Syncing Codex named profile files"
+run_or_echo mkdir -p "$CODEX_HOME"
+for profile in strict yolo; do
+  if [[ -e "$CODEX_HOME/$profile.config.toml" || -L "$CODEX_HOME/$profile.config.toml" ]]; then
+    log "Preserving existing $profile.config.toml (user customizations win over shipped defaults)"
+    continue
+  fi
+  record_managed_path "$CODEX_HOME/$profile.config.toml"
+  run_or_echo cp "$REPO_ROOT/.codex/$profile.config.toml" "$CODEX_HOME/$profile.config.toml"
+done
+
 log "Syncing Codex navigation guide"
 run_or_echo mkdir -p "$(dirname "$CODEX_NAV_GUIDE_DEST")"
 record_managed_path "$CODEX_NAV_GUIDE_DEST"

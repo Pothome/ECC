@@ -181,10 +181,20 @@ const checks = [
       strict: { approval_policy: 'on-request', sandbox_mode: 'read-only', web_search: 'cached' },
       yolo: { approval_policy: 'never', sandbox_mode: 'workspace-write', web_search: 'live' },
     })) {
-      assert.deepStrictEqual(TOML.parse(fs.readFileSync(
-        path.join(repoRoot, '.codex', `${name}.config.toml`), 'utf8')), expected);
+      const profile = TOML.parse(fs.readFileSync(
+        path.join(repoRoot, '.codex', `${name}.config.toml`), 'utf8'));
+      assert.deepStrictEqual(profile, expected);
     }
     assert.ok(!Object.hasOwn(user, 'profile'), 'Defining a profile must not select it');
+    assert.ok(!Object.hasOwn(user, 'profiles'), 'Profiles must not live in config.toml on Codex 0.134.0+');
+    for (const [name, expected] of [
+      ['strict', { approval_policy: 'on-request', sandbox_mode: 'read-only', web_search: 'cached' }],
+      ['yolo', { approval_policy: 'never', sandbox_mode: 'workspace-write', web_search: 'live' }],
+    ]) {
+      const profile = TOML.parse(fs.readFileSync(
+        path.join(repoRoot, '.codex', `${name}.config.toml`), 'utf8'));
+      assert.deepStrictEqual(profile, expected);
+    }
   }],
   ['user reference preserves guidance, role mappings and existing MCP data', () => {
     const user = readUserReference();
