@@ -263,12 +263,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@opencode-ai/plugin@npm:1.18.34":
-  version: 1.18.34
-  resolution: "@opencode-ai/plugin@npm:1.18.34"
+"@opencode-ai/plugin@npm:1.18.35":
+  version: 1.18.35
+  resolution: "@opencode-ai/plugin@npm:1.18.35"
   dependencies:
     "@ai-sdk/provider": "npm:3.0.8"
-    "@opencode-ai/sdk": "npm:1.18.34"
+    "@opencode-ai/sdk": "npm:1.18.35"
     effect: "npm:4.0.0-beta.83"
     zod: "npm:4.1.8"
   peerDependencies:
@@ -282,16 +282,16 @@ __metadata:
       optional: true
     "@opentui/solid":
       optional: true
-  checksum: 10c0/09929c3a34d73aba35287d559256489570af82c25494b0d6d8ebf887b9aaf5a2e9a7ff0d449ca9a9e864e223ebdb0d2da378ccd4e4c4daba8dcf98820042b47d
+  checksum: 10c0/1df155822bc96a83a9b17ef0fe5abbde27f7006411918643c1bed86eccfd68a7b4a58cf64b9255fc72c4b2c16a4105290fd0084b68cf7c0c39117d23452d929a
   languageName: node
   linkType: hard
 
-"@opencode-ai/sdk@npm:1.18.34":
-  version: 1.18.34
-  resolution: "@opencode-ai/sdk@npm:1.18.34"
+"@opencode-ai/sdk@npm:1.18.35":
+  version: 1.18.35
+  resolution: "@opencode-ai/sdk@npm:1.18.35"
   dependencies:
     cross-spawn: "npm:7.0.6"
-  checksum: 10c0/bad0f38016e59568d5e16e9bdeddca9d491845269de5d860640132efb3a4d5612057418a4327a4264d937fa24bf914458e458f3dcd88e68b9e50951570fb68e2
+  checksum: 10c0/0f4b04ed41484e9e610c31af1c10ad3a4bbda70613435cef94a362f38f1ae91f799768b5fb85c27ac8294e8b3e6fc59225072f471440e0d982392cd664b7dcb3
   languageName: node
   linkType: hard
 
@@ -654,11 +654,11 @@ __metadata:
   dependencies:
     "@eslint/js": "npm:9.39.2"
     "@iarna/toml": "npm:2.2.5"
-    "@opencode-ai/plugin": "npm:1.18.34"
+    "@opencode-ai/plugin": "npm:1.18.35"
     "@types/node": "npm:26.6.4"
     ajv: "npm:8.20.0"
     c8: "npm:11.0.0"
-    eslint: "npm:10.11.0"
+    eslint: "npm:10.12.0"
     globals: "npm:17.13.0"
     js-yaml: "npm:4.3.2"
     markdownlint-cli: "npm:0.49.1"
@@ -753,9 +753,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"eslint@npm:10.11.0":
-  version: 10.11.0
-  resolution: "eslint@npm:10.11.0"
+"eslint@npm:10.12.0":
+  version: 10.12.0
+  resolution: "eslint@npm:10.12.0"
   dependencies:
     "@eslint-community/eslint-utils": "npm:^4.8.0"
     "@eslint-community/regexpp": "npm:^4.12.2"
@@ -794,7 +794,7 @@ __metadata:
       optional: true
   bin:
     eslint: bin/eslint.js
-  checksum: 10c0/c767f45f21d1921b41d70e30b1c8fa7ec4e65c0f43a8d80cc4990ca3d923127fa7b9b3416b8f5be6e877d9286f97d3c51a04ed341bc6aa73c0dba0f463e1f861
+  checksum: 10c0/1302ce8a7df2f67fe8f4014b2f9449bd38eb86903ba7b841d9a8ca5a5daf8ee15442861ab870e96c0074d5f333b405d7b2f16388981f807db410cc3a02178af9
   languageName: node
   linkType: hard
 
