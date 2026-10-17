@@ -21,8 +21,13 @@ function normalizeFailureReason(reason) {
     .replace(/\d{4}-\d{2}-\d{2}[t ]\d{2}:\d{2}:\d{2}[.\dz]*/g, '<timestamp>')
     // Strip UUIDs (already lowercased)
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/g, '<uuid>')
-    // Strip file paths
-    .replace(/\/[\w./-]+/g, '<path>')
+    // Quoted Windows paths preserve spaces in the final path component.
+    .replace(/(["'])(?:[a-z]:[\\/]|\\\\)[^\r\n]*?\1/gu, '$1<path>$1')
+    // Directories may contain spaces, but trailing whitespace separates diagnostic prose.
+    // A colon delimits spaced leaves; trailing separators belong to the path.
+    .replace(/(?:\b[a-z]:|\\)[\\/](?:[^\\/:*?"<>|\r\n]*[^\s\\/:*?"<>|][\\/])*[^\s\\/:*?"<>|(),;]+(?: [^\\/:*?"<>|\r\n]+(?=:))?[\\/]*/gu, '<path>')
+    // Strip remaining file paths
+    .replace(/(?:\b[a-z]:)?[\\/][\w./\\-]+/g, '<path>')
     // Collapse whitespace
     .replace(/\s+/g, ' ')
     .trim();

@@ -8,6 +8,7 @@ const {
   normalizeFailureReason,
   groupFailures,
   detectPatterns,
+  inspect,
   generateReport,
   suggestAction,
   DEFAULT_FAILURE_THRESHOLD,
@@ -58,15 +59,63 @@ async function runTests() {
   })) passed += 1; else failed += 1;
 
   if (await test('normalizeFailureReason strips file paths', async () => {
-    const normalized = normalizeFailureReason('File not found: /usr/local/bin/node');
-    assert.ok(!normalized.includes('/usr/local'));
-    assert.ok(normalized.includes('<path>'));
+    for (const reason of [
+      'File not found: /usr/local/bin/node',
+      String.raw`File not found: C:\project-a\src\one.js`,
+      'File not found: D:/project-b/src/two.js',
+      String.raw`File not found: \\server\share\three.js`,
+      String.raw`File not found: C:/project-a\src\one.js`,
+      String.raw`File not found: D:\project-b/src/two.js`,
+      'File not found: C:\\project-a\\',
+      'File not found: D:/project-b/',
+      'File not found: \\\\server\\share\\',
+    ]) {
+      assert.strictEqual(normalizeFailureReason(reason), 'file not found: <path>');
+    }
+    assert.strictEqual(normalizeFailureReason('Request failed: https://example.com/test'), 'request failed: https:<path>');
   })) passed += 1; else failed += 1;
 
   if (await test('normalizeFailureReason handles null and empty values', async () => {
     assert.strictEqual(normalizeFailureReason(null), 'unknown');
     assert.strictEqual(normalizeFailureReason(''), 'unknown');
     assert.strictEqual(normalizeFailureReason(undefined), 'unknown');
+    assert.strictEqual(normalizeFailureReason(123), 'unknown');
+  })) passed += 1; else failed += 1;
+
+  if (await test('normalizeFailureReason strips quoted Windows paths with spaces and Unicode', async () => {
+    for (const filePath of [
+      String.raw`C:\Usuarios\José Pérez\mi archivo.js`,
+      String.raw`D:\用户\张三\我的 文件.js`,
+      String.raw`\\servidor\recurso compartido\José\mi archivo.js`,
+    ]) {
+      for (const quote of ['"', "'"]) {
+        assert.strictEqual(normalizeFailureReason(`Cannot open ${quote}${filePath}${quote}: permission denied`),
+          `cannot open ${quote}<path>${quote}: permission denied`);
+      }
+    }
+  })) passed += 1; else failed += 1;
+
+  if (await test('normalizeFailureReason preserves diagnostics after unquoted Windows paths', async () => {
+    for (const filePath of [
+      String.raw`C:\Program Files\node`,
+      'D:/Program Files/node',
+      String.raw`\\server\shared files\node`,
+      String.raw`C:\Users\Alice Smith\my file.js`,
+      'D:/Users/Bob Jones/your script.js',
+      String.raw`\\server\shared files\other task.js`,
+    ]) {
+      assert.strictEqual(normalizeFailureReason(`${filePath}: permission denied`), '<path>: permission denied');
+    }
+    assert.strictEqual(normalizeFailureReason('Request failed: https://example.com/node'), 'request failed: https:<path>');
+    assert.strictEqual(normalizeFailureReason('Cannot run /usr/local/bin/node: permission denied'), 'cannot run <path>: permission denied');
+    assert.strictEqual(normalizeFailureReason('Cannot open D:/Users/Alice Smith/one.js permission denied in /tmp/log'),
+      'cannot open <path> permission denied in <path>');
+    assert.strictEqual(normalizeFailureReason('Cannot run C:/tools/node failed to open /tmp/log'),
+      'cannot run <path> failed to open <path>');
+    assert.strictEqual(normalizeFailureReason('D:/Program Files/node permission denied in /tmp/log'),
+      '<path> permission denied in <path>');
+    assert.strictEqual(normalizeFailureReason('Cannot run C:/tools/node failed to open /tmp/log: permission denied'),
+      'cannot run <path> failed to open <path>: permission denied');
   })) passed += 1; else failed += 1;
 
   if (await test('groupFailures groups by skillId and normalized reason', async () => {
@@ -171,6 +220,25 @@ async function runTests() {
     assert.ok(patterns[0].normalizedReason.includes('<path>'));
   })) passed += 1; else failed += 1;
 
+  if (await test('detectPatterns groups failures from different Windows paths', async () => {
+    const runs = [
+      makeSkillRun({ id: 'r1', failureReason: String.raw`Cannot open C:\Users\Alice Smith\my file.js: permission denied` }),
+      makeSkillRun({ id: 'r2', failureReason: 'Cannot open D:/Users/Bob Jones/your script.js: permission denied' }),
+      makeSkillRun({ id: 'r3', failureReason: String.raw`Cannot open E:\Users\Carol White\other task.js: permission denied` }),
+    ];
+    const patterns = detectPatterns(runs);
+    assert.strictEqual(patterns.length, 1);
+    assert.strictEqual(patterns[0].count, 3);
+    assert.strictEqual(patterns[0].normalizedReason, 'cannot open <path>: permission denied');
+    assert.strictEqual(inspect({ getStatus: () => ({ skillRuns: { recent: runs } }) }).status, 'attention_needed');
+    const directoryRuns = ['C:\\project-a\\', 'D:/project-b/', '\\\\server\\share\\'].map((filePath, index) =>
+      makeSkillRun({ id: `directory-${index}`, failureReason: `Cannot open ${filePath}` }));
+    const directoryPatterns = detectPatterns(directoryRuns);
+    assert.strictEqual(directoryPatterns.length, 1);
+    assert.strictEqual(directoryPatterns[0].count, 3);
+    assert.strictEqual(generateReport(directoryPatterns).status, 'attention_needed');
+  })) passed += 1; else failed += 1;
+
   if (await test('detectPatterns tracks unique session IDs and versions', async () => {
     const runs = [
       makeSkillRun({ id: 'r1', sessionId: 'sess-1', skillVersion: '1.0.0', failureReason: 'err' }),
@@ -190,6 +258,7 @@ async function runTests() {
     assert.strictEqual(report.patternCount, 0);
     assert.ok(report.summary.includes('No recurring'));
     assert.ok(report.generatedAt);
+    assert.strictEqual(inspect({ getStatus: () => ({ skillRuns: {} }) }, { threshold: 1, windowSize: 1 }).status, 'clean');
   })) passed += 1; else failed += 1;
 
   if (await test('generateReport produces structured report from patterns', async () => {
